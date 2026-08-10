@@ -139,10 +139,12 @@ export default function App() {
   const handleConnectSession = async () => {
     setIsConnectingSession(true);
     try {
-      const res = await axios.post(`${API_BASE}/automation/session/connect`);
+      const res = await axios.post(`${API_BASE}/automation/session/connect`, {}, { timeout: 15000 });
       setSessionData(res.data);
     } catch (err) {
-      alert(`Failed to connect session: ${err.message}`);
+      console.warn('Connect session notice:', err.message);
+      // Refresh status immediately as browser launches in background
+      await fetchSessionData();
     } finally {
       setIsConnectingSession(false);
     }

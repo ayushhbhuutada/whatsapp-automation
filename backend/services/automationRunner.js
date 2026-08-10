@@ -120,29 +120,33 @@ class AutomationRunner {
       const headlessSetting = await get('SELECT value FROM settings WHERE key = "headless"');
       const isHeadless = headlessSetting ? headlessSetting.value === 'true' : false;
 
-      this.browserContext = await chromium.launchPersistentContext(userDir, {
-        headless: isHeadless,
-        args: [
-          '--no-sandbox',
-          '--disable-setuid-sandbox',
-          '--disable-gpu',
-          '--disable-dev-shm-usage',
-          '--window-size=1280,720'
-        ]
-      });
+      try {
+        this.browserContext = await chromium.launchPersistentContext(userDir, {
+          headless: isHeadless,
+          args: [
+            '--no-sandbox',
+            '--disable-setuid-sandbox',
+            '--disable-gpu',
+            '--disable-dev-shm-usage',
+            '--window-size=1280,720'
+          ]
+        });
 
-      this.page = await this.browserContext.newPage();
-      await this.page.goto('https://web.whatsapp.com');
-    }
-
-    for (let i = 0; i < 10; i++) {
-      const status = await this.checkSession();
-      if (status.connected || status.qrImageUrl) {
-        return status;
+        const pages = this.browserContext.pages();
+        this.page = pages.length > 0 ? pages[0] : await this.browserContext.newPage();
+        
+        // Asynchronously navigate to WhatsApp Web
+        this.page.goto('https://web.whatsapp.com', { waitUntil: 'domcontentloaded', timeout: 30000 }).catch(err => {
+          console.error('WhatsApp Web navigation notice:', err.message);
+        });
+      } catch (err) {
+        console.error('Error launching Chromium context:', err);
+        throw new Error(`Failed to launch browser context: ${err.message}`);
       }
-      await new Promise(r => setTimeout(r, 1000));
     }
 
+    // Quick wait for 1.5s then return current session state immediately
+    await new Promise(r => setTimeout(r, 1500));
     return await this.checkSession();
   }
 
