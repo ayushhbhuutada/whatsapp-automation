@@ -34,14 +34,15 @@ echo [2/3] Preparing server ports...
 taskkill /F /IM node.exe /T 2>nul
 
 :: 4. Start Backend Server (Port 5000)
-echo [3/3] Starting application servers...
-start "WhatsApp Backend" /min cmd /c "cd /d "%~dp0backend" && npm run dev"
+echo [3/3] Starting Backend Server (Port 5000)...
+start "WhatsApp Backend (Port 5000)" cmd /k "cd /d "%~dp0backend" && npm run dev"
 
 :: 5. Start Frontend Server (Port 5173)
-start "WhatsApp Frontend" /min cmd /c "cd /d "%~dp0frontend" && npm run dev"
+echo       Starting Frontend Server (Port 5173)...
+start "WhatsApp Frontend (Port 5173)" cmd /k "cd /d "%~dp0frontend" && npm run dev"
 
 :: 6. Wait for servers to initialize
-timeout /t 4 /nobreak >nul
+timeout /t 5 /nobreak >nul
 
 :: 7. Open Dashboard in Browser
 echo.
@@ -54,12 +55,7 @@ echo  WhatsApp Automation is active!
 echo  Dashboard URL: http://localhost:5173
 echo ================================================
 echo.
-echo  Keep this window open while using the app.
-echo  Press any key to stop the servers and exit.
+echo  Keep the server windows open while using the app.
+echo  Press any key to close this window.
 echo ================================================
 pause >nul
-
-echo.
-echo Stopping application servers...
-taskkill /F /IM node.exe /T 2>nul
-echo Done!
