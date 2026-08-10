@@ -487,6 +487,24 @@ router.post('/automation/control', async (req, res) => {
   }
 });
 
+router.get('/automation/session', async (req, res) => {
+  try {
+    const session = await runner.checkSession();
+    res.json(session);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.post('/automation/session/connect', async (req, res) => {
+  try {
+    const session = await runner.connectSession();
+    res.json(session);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 router.post('/automation/logout', async (req, res) => {
   try {
     await runner.logoutSession();

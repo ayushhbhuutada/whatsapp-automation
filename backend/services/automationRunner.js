@@ -26,13 +26,124 @@ class AutomationRunner {
   };
 
   getStatus() {
+    const qrPath = path.resolve(__dirname, '../../uploads/qr.png');
+    const hasQr = fs.existsSync(qrPath);
     return {
       status: this.status,
       currentCampaignId: this.currentCampaignId,
-      qrImageUrl: this.status === 'Running' && fs.existsSync(path.resolve(__dirname, '../../uploads/qr.png')) 
-        ? '/uploads/qr.png' 
-        : null
+      qrImageUrl: hasQr ? `/uploads/qr.png?t=${Date.now()}` : null
     };
+  }
+
+  async checkSession() {
+    const qrPath = path.resolve(__dirname, '../../uploads/qr.png');
+    let qrUrl = fs.existsSync(qrPath) ? `/uploads/qr.png?t=${Date.now()}` : null;
+
+    if (!this.browserContext || !this.page || this.page.isClosed()) {
+      const userDirSetting = await get('SELECT value FROM settings WHERE key = "browser_data_dir"');
+      const defaultUserDir = process.env.LOCALAPPDATA
+        ? path.join(process.env.LOCALAPPDATA, 'WhatsAppAutomation', 'browser-data')
+        : path.resolve(__dirname, '../../config/browser-data');
+      const userDir = userDirSetting ? userDirSetting.value : defaultUserDir;
+
+      const hasSavedSession = fs.existsSync(userDir) && fs.readdirSync(userDir).length > 0;
+      return {
+        connected: false,
+        status: hasSavedSession ? 'Saved Session Available' : 'Not Connected',
+        hasSavedSession,
+        qrImageUrl: qrUrl,
+        browserOpen: false
+      };
+    }
+
+    try {
+      const chatListVisible = await this.page.isVisible('[data-testid="chat-list"], div[role="grid"], #pane-side').catch(() => false);
+      if (chatListVisible) {
+        if (fs.existsSync(qrPath)) {
+          try { fs.unlinkSync(qrPath); } catch (e) {}
+        }
+        return {
+          connected: true,
+          status: 'Connected',
+          hasSavedSession: true,
+          qrImageUrl: null,
+          browserOpen: true
+        };
+      }
+
+      const qrVisible = await this.page.isVisible('canvas, [data-testid="qrcode"]').catch(() => false);
+      if (qrVisible) {
+        const qrElement = await this.page.$('canvas, [data-testid="qrcode"]');
+        if (qrElement) {
+          const uploadsDir = path.resolve(__dirname, '../../uploads');
+          if (!fs.existsSync(uploadsDir)) {
+            fs.mkdirSync(uploadsDir, { recursive: true });
+          }
+          await qrElement.screenshot({ path: qrPath }).catch(() => {});
+          qrUrl = `/uploads/qr.png?t=${Date.now()}`;
+        }
+        return {
+          connected: false,
+          status: 'Scan QR Code Required',
+          hasSavedSession: false,
+          qrImageUrl: qrUrl,
+          browserOpen: true
+        };
+      }
+
+      return {
+        connected: false,
+        status: 'Loading WhatsApp Web...',
+        hasSavedSession: false,
+        qrImageUrl: qrUrl,
+        browserOpen: true
+      };
+    } catch (e) {
+      return {
+        connected: false,
+        status: 'Not Connected',
+        hasSavedSession: false,
+        qrImageUrl: null,
+        browserOpen: false
+      };
+    }
+  }
+
+  async connectSession() {
+    if (!this.browserContext || !this.page || this.page.isClosed()) {
+      const userDirSetting = await get('SELECT value FROM settings WHERE key = "browser_data_dir"');
+      const defaultUserDir = process.env.LOCALAPPDATA
+        ? path.join(process.env.LOCALAPPDATA, 'WhatsAppAutomation', 'browser-data')
+        : path.resolve(__dirname, '../../config/browser-data');
+      const userDir = userDirSetting ? userDirSetting.value : defaultUserDir;
+
+      const headlessSetting = await get('SELECT value FROM settings WHERE key = "headless"');
+      const isHeadless = headlessSetting ? headlessSetting.value === 'true' : false;
+
+      this.browserContext = await chromium.launchPersistentContext(userDir, {
+        headless: isHeadless,
+        args: [
+          '--no-sandbox',
+          '--disable-setuid-sandbox',
+          '--disable-gpu',
+          '--disable-dev-shm-usage',
+          '--window-size=1280,720'
+        ]
+      });
+
+      this.page = await this.browserContext.newPage();
+      await this.page.goto('https://web.whatsapp.com');
+    }
+
+    for (let i = 0; i < 10; i++) {
+      const status = await this.checkSession();
+      if (status.connected || status.qrImageUrl) {
+        return status;
+      }
+      await new Promise(r => setTimeout(r, 1000));
+    }
+
+    return await this.checkSession();
   }
 
   async startCampaign(campaignId) {

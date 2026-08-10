@@ -27,7 +27,11 @@ import {
   Edit3,
   Layers,
   Globe,
-  Clipboard
+  Clipboard,
+  QrCode,
+  Smartphone,
+  LogOut,
+  ShieldCheck
 } from 'lucide-react';
 
 const API_BASE = 'http://localhost:5000/api';
@@ -40,6 +44,8 @@ export default function App() {
   const [logs, setLogs] = useState([]);
   const [settings, setSettings] = useState({});
   const [automationStatus, setAutomationStatus] = useState({ status: 'Idle', currentCampaignId: null });
+  const [sessionData, setSessionData] = useState({ connected: false, status: 'Not Connected', qrImageUrl: null });
+  const [isConnectingSession, setIsConnectingSession] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [systemAlert, setSystemAlert] = useState(null);
 
@@ -51,6 +57,7 @@ export default function App() {
     fetchSettings();
     fetchCampaigns();
     fetchAutomationStatus();
+    fetchSessionData();
   }, []);
 
   // Poll automation status and active campaign details
@@ -60,6 +67,7 @@ export default function App() {
     pollRef.current = setInterval(() => {
       fetchAutomationStatus();
       fetchCampaigns();
+      fetchSessionData();
       if (selectedCampaignId) {
         fetchContacts(selectedCampaignId);
         fetchLogs(selectedCampaignId);
@@ -116,6 +124,37 @@ export default function App() {
       setAutomationStatus(res.data);
     } catch (err) {
       console.error('Error fetching automation status:', err);
+    }
+  };
+
+  const fetchSessionData = async () => {
+    try {
+      const res = await axios.get(`${API_BASE}/automation/session`);
+      setSessionData(res.data);
+    } catch (err) {
+      console.error('Error fetching session data:', err);
+    }
+  };
+
+  const handleConnectSession = async () => {
+    setIsConnectingSession(true);
+    try {
+      const res = await axios.post(`${API_BASE}/automation/session/connect`);
+      setSessionData(res.data);
+    } catch (err) {
+      alert(`Failed to connect session: ${err.message}`);
+    } finally {
+      setIsConnectingSession(false);
+    }
+  };
+
+  const handleLogoutSession = async () => {
+    if (!confirm('Are you sure you want to disconnect your WhatsApp account from this computer?')) return;
+    try {
+      await axios.post(`${API_BASE}/automation/logout`);
+      fetchSessionData();
+    } catch (err) {
+      alert(`Failed to logout session: ${err.message}`);
     }
   };
 
@@ -220,6 +259,17 @@ export default function App() {
               Dashboard
             </button>
             <button 
+              onClick={() => setActiveTab('session')}
+              className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 text-sm font-medium ${
+                activeTab === 'session' 
+                  ? 'bg-slate-800 text-emerald-400 border border-slate-700/50' 
+                  : 'text-slate-400 hover:bg-slate-900/50 hover:text-slate-200'
+              }`}
+            >
+              <Smartphone size={18} />
+              WhatsApp Account
+            </button>
+            <button 
               onClick={() => setActiveTab('audience')}
               className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 text-sm font-medium ${
                 activeTab === 'audience' 
@@ -294,6 +344,7 @@ export default function App() {
           <div>
             <h2 className="text-2xl font-bold tracking-tight text-white font-heading">
               {activeTab === 'dashboard' && 'Dashboard Overview'}
+              {activeTab === 'session' && 'WhatsApp Account & Login'}
               {activeTab === 'audience' && 'Audience & Contact Hub'}
               {activeTab === 'create' && 'Initialize Campaign'}
               {activeTab === 'contacts' && 'Recipient Queue'}
@@ -302,6 +353,7 @@ export default function App() {
             </h2>
             <p className="text-sm text-slate-400">
               {activeTab === 'dashboard' && 'Monitor and execute local messaging tasks.'}
+              {activeTab === 'session' && 'Link and verify your WhatsApp account so campaigns run automatically.'}
               {activeTab === 'audience' && 'Central Address Book, Contact Groups, and Google Sheets Sync.'}
               {activeTab === 'create' && 'Select audience groups, live Google Sheets, or paste text to launch outreach.'}
               {activeTab === 'contacts' && 'Search, filter, and inspect pending message delivery states.'}
@@ -407,6 +459,16 @@ export default function App() {
             <SettingsView 
               settings={settings}
               onSave={fetchSettings}
+            />
+          )}
+
+          {activeTab === 'session' && (
+            <WhatsAppSessionView 
+              sessionData={sessionData}
+              isConnecting={isConnectingSession}
+              onConnect={handleConnectSession}
+              onRefresh={fetchSessionData}
+              onLogout={handleLogoutSession}
             />
           )}
         </div>
@@ -1707,6 +1769,146 @@ function SettingsView({ settings, onSave }) {
           )}
         </button>
       </form>
+    </div>
+  );
+}
+
+// ============================================================================
+// VIEW COMPONENT 6: WHATSAPP ACCOUNT / SESSION LOGIN
+// ============================================================================
+function WhatsAppSessionView({ sessionData, isConnecting, onConnect, onRefresh, onLogout }) {
+  return (
+    <div className="space-y-6 animate-fade-in">
+      {/* Connection Status Card */}
+      <div className="glass-panel border border-slate-800 rounded-2xl p-6 relative overflow-hidden">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+          <div className="flex items-start gap-4">
+            <div className={`p-3.5 rounded-2xl ${
+              sessionData.connected 
+                ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' 
+                : sessionData.qrImageUrl 
+                  ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20 animate-pulse' 
+                  : 'bg-slate-800 text-slate-400 border border-slate-700'
+            }`}>
+              {sessionData.connected ? <ShieldCheck size={28} /> : <QrCode size={28} />}
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className="text-lg font-bold text-white font-heading">WhatsApp Web Session</h3>
+                <span className={`px-2.5 py-0.5 rounded-full text-xs font-semibold ${
+                  sessionData.connected 
+                    ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' 
+                    : sessionData.qrImageUrl 
+                      ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30' 
+                      : 'bg-slate-800 text-slate-400 border border-slate-700'
+                }`}>
+                  {sessionData.connected ? 'Connected & Authenticated' : (sessionData.qrImageUrl ? 'Action Required: Scan QR' : sessionData.status || 'Not Connected')}
+                </span>
+              </div>
+              <p className="text-sm text-slate-400 mt-1">
+                {sessionData.connected 
+                  ? 'Your WhatsApp Web session is logged in and saved locally. All campaigns will execute automatically.' 
+                  : 'Link your WhatsApp account once below. Your session will remain saved on this computer.'}
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-3">
+            {!sessionData.connected && (
+              <button
+                onClick={onConnect}
+                disabled={isConnecting}
+                className="flex items-center gap-2 px-5 py-2.5 bg-emerald-500 hover:bg-emerald-600 disabled:opacity-50 text-white rounded-xl font-medium text-sm transition-all shadow-lg shadow-emerald-500/20"
+              >
+                {isConnecting ? <RefreshCw size={16} className="animate-spin" /> : <Smartphone size={16} />}
+                {isConnecting ? 'Opening Browser...' : 'Connect / Open WhatsApp'}
+              </button>
+            )}
+
+            <button
+              onClick={onRefresh}
+              className="p-2.5 bg-slate-900 hover:bg-slate-800 text-slate-300 rounded-xl border border-slate-800 transition-all"
+              title="Refresh Connection Status"
+            >
+              <RefreshCw size={16} />
+            </button>
+
+            {(sessionData.connected || sessionData.hasSavedSession) && (
+              <button
+                onClick={onLogout}
+                className="flex items-center gap-2 px-4 py-2.5 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 rounded-xl text-sm font-medium transition-all"
+              >
+                <LogOut size={16} />
+                Disconnect Account
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* QR Code Section */}
+      {sessionData.qrImageUrl && !sessionData.connected && (
+        <div className="glass-panel border border-amber-500/30 rounded-2xl p-6 bg-amber-500/5">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-center">
+            <div>
+              <div className="flex items-center gap-2 text-amber-400 font-semibold mb-3 text-base">
+                <QrCode size={20} />
+                <span>Scan QR Code to Link WhatsApp</span>
+              </div>
+              <ol className="space-y-3 text-sm text-slate-300">
+                <li className="flex items-start gap-2.5">
+                  <span className="w-5 h-5 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center text-xs font-bold text-emerald-400 shrink-0 mt-0.5">1</span>
+                  <span>Open <strong>WhatsApp</strong> on your phone.</span>
+                </li>
+                <li className="flex items-start gap-2.5">
+                  <span className="w-5 h-5 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center text-xs font-bold text-emerald-400 shrink-0 mt-0.5">2</span>
+                  <span>Tap <strong>Menu (⋮)</strong> or <strong>Settings (⚙)</strong>.</span>
+                </li>
+                <li className="flex items-start gap-2.5">
+                  <span className="w-5 h-5 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center text-xs font-bold text-emerald-400 shrink-0 mt-0.5">3</span>
+                  <span>Select <strong>Linked Devices</strong> and tap <strong>Link a Device</strong>.</span>
+                </li>
+                <li className="flex items-start gap-2.5">
+                  <span className="w-5 h-5 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center text-xs font-bold text-emerald-400 shrink-0 mt-0.5">4</span>
+                  <span>Point your phone camera at this screen to scan the QR code.</span>
+                </li>
+              </ol>
+            </div>
+
+            <div className="flex flex-col items-center justify-center p-4 bg-slate-900 border border-slate-800 rounded-xl">
+              <img 
+                src={`http://localhost:5000${sessionData.qrImageUrl}`} 
+                alt="WhatsApp Web QR Code"
+                className="w-64 h-64 object-contain rounded-lg border-2 border-white/20 bg-white p-2"
+              />
+              <p className="text-xs text-slate-400 mt-3 animate-pulse">QR Code active. Scan now to connect.</p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Guide & Specs Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div className="glass-panel border border-slate-800 rounded-2xl p-6">
+          <h4 className="font-semibold text-white text-base mb-2 flex items-center gap-2">
+            <ShieldCheck size={18} className="text-emerald-400" />
+            Persistent Session Storage
+          </h4>
+          <p className="text-sm text-slate-400 leading-relaxed">
+            Your login cookies are saved locally on this PC in AppData. Once logged in, campaigns launch instantly without asking for QR scans.
+          </p>
+        </div>
+
+        <div className="glass-panel border border-slate-800 rounded-2xl p-6">
+          <h4 className="font-semibold text-white text-base mb-2 flex items-center gap-2">
+            <Smartphone size={18} className="text-emerald-400" />
+            Standalone Operation
+          </h4>
+          <p className="text-sm text-slate-400 leading-relaxed">
+            WhatsApp Multi-Device keeps your PC connected even if your mobile phone is offline or disconnected from Wi-Fi.
+          </p>
+        </div>
+      </div>
     </div>
   );
 }
