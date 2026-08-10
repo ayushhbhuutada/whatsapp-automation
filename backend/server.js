@@ -40,8 +40,8 @@ app.use((err, req, res, next) => {
   res.status(500).json({ error: err.message || 'Internal Server Error' });
 });
 
-// Start Server
-const server = app.listen(PORT, () => {
+// Start Server (Bind to 0.0.0.0 for universal IPv4 / loopback access on all PCs)
+const server = app.listen(PORT, '0.0.0.0', () => {
   console.log(`WhatsApp Automation API Server running on port ${PORT}`);
 });
 

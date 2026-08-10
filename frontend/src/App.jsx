@@ -34,7 +34,9 @@ import {
   ShieldCheck
 } from 'lucide-react';
 
-const API_BASE = 'http://localhost:5000/api';
+const API_HOST = typeof window !== 'undefined' ? (window.location.hostname || '127.0.0.1') : '127.0.0.1';
+const API_SERVER = `http://${API_HOST}:5000`;
+const API_BASE = `${API_SERVER}/api`;
 
 export default function App() {
   const [activeTab, setActiveTab] = useState('dashboard');
@@ -1879,7 +1881,7 @@ function WhatsAppSessionView({ sessionData, isConnecting, onConnect, onRefresh, 
 
             <div className="flex flex-col items-center justify-center p-4 bg-slate-900 border border-slate-800 rounded-xl">
               <img 
-                src={`http://localhost:5000${sessionData.qrImageUrl}`} 
+                src={`${API_SERVER}${sessionData.qrImageUrl}`} 
                 alt="WhatsApp Web QR Code"
                 className="w-64 h-64 object-contain rounded-lg border-2 border-white/20 bg-white p-2"
               />
