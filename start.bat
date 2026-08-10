@@ -7,12 +7,22 @@ echo     WhatsApp Automation Suite - Launching...
 echo ================================================
 echo.
 
-:: 0. Auto-Check & Pull Latest Updates from GitHub
-where git >nul 2>nul
-if %errorlevel% equ 0 (
-    echo [1/3] Checking for latest updates from GitHub...
-    git pull origin main 2>nul
+:: 0. Auto-Check & Sync Latest Updates from GitHub
+if exist "%~dp0.git" (
+    echo [1/3] Syncing latest code updates from GitHub...
+    git fetch origin main >nul 2>&1
+    git reset --hard origin/main >nul 2>&1
+    if %errorlevel% equ 0 (
+        echo       Repository synced to latest commit.
+    ) else (
+        git pull origin main --no-rebase
+    )
+) else (
+    echo [1/3] Running from extracted ZIP folder.
+    echo       (Tip: Clone via 'git clone https://github.com/ayushhbhuutada/whatsapp-automation.git' for auto-updates)
 )
+
+echo.
 
 :: 1. Auto-Detect & Install Backend Dependencies if missing
 if not exist "%~dp0backend\node_modules" (
