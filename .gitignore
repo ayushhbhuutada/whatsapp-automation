@@ -1,0 +1,43 @@
+# ==========================================
+# GitHub Security & Data Privacy Rules
+# ==========================================
+
+# 1. WhatsApp Browser Session Data (CRITICAL: NEVER upload to Git/GitHub)
+config/browser-data/
+config/browser-data/*
+**/browser-data/
+AppData/
+
+# 2. Local Databases & Personal Data (CRITICAL: Keeps contacts, logs, and campaigns private)
+database/*.sqlite
+database/*.db
+*.sqlite
+*.db
+
+# 3. Uploaded Files, Contacts Excel Files, Attachments & Scanned QR Codes
+uploads/*
+!uploads/.gitkeep
+attachments/*
+!attachments/.gitkeep
+*.png
+*.jpg
+*.jpeg
+*.xlsx
+*.csv
+
+# 4. Environment & Secret Keys
+.env
+backend/.env
+frontend/.env
+*.env.local
+
+# 5. Node Dependencies & Build Artifacts
+node_modules/
+backend/node_modules/
+frontend/node_modules/
+frontend/dist/
+
+# 6. System & OS Files
+.DS_Store
+Thumbs.db
+desktop.ini

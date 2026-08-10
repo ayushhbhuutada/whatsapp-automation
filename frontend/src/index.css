@@ -1,0 +1,96 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap');
+
+@import "tailwindcss";
+
+@layer base {
+  body {
+    @apply bg-slate-950 text-slate-100 font-sans antialiased overflow-x-hidden;
+  }
+}
+
+/* Premium custom styling utilities */
+.glass-panel {
+  background: rgba(15, 23, 42, 0.45);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.glass-card {
+  background: rgba(30, 41, 59, 0.4);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.glass-input {
+  background: rgba(15, 23, 42, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.glass-input:focus {
+  border-color: rgba(37, 211, 102, 0.5);
+  box-shadow: 0 0 10px rgba(37, 211, 102, 0.15);
+  outline: none;
+}
+
+.btn-primary {
+  @apply bg-emerald-600 hover:bg-emerald-500 text-white font-medium px-4 py-2 rounded-lg transition-all duration-200 shadow-lg active:scale-95 flex items-center justify-center gap-2;
+}
+
+.btn-secondary {
+  @apply bg-slate-800 hover:bg-slate-700 text-slate-200 font-medium px-4 py-2 rounded-lg transition-all duration-200 active:scale-95 flex items-center justify-center gap-2 border border-slate-700;
+}
+
+.btn-danger {
+  @apply bg-rose-600 hover:bg-rose-500 text-white font-medium px-4 py-2 rounded-lg transition-all duration-200 shadow-lg active:scale-95 flex items-center justify-center gap-2;
+}
+
+.btn-warning {
+  @apply bg-amber-600 hover:bg-amber-500 text-white font-medium px-4 py-2 rounded-lg transition-all duration-200 shadow-lg active:scale-95 flex items-center justify-center gap-2;
+}
+
+/* Custom Webkit scrollbar for premium desktop styling */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: rgba(15, 23, 42, 0.5);
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+/* Status Pill classes */
+.status-pill {
+  @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold uppercase tracking-wider;
+}
+
+.status-pending {
+  @apply bg-amber-500/10 text-amber-400 border border-amber-500/25;
+}
+
+.status-sending {
+  @apply bg-blue-500/10 text-blue-400 border border-blue-500/25 animate-pulse;
+}
+
+.status-sent {
+  @apply bg-emerald-500/10 text-emerald-400 border border-emerald-500/25;
+}
+
+.status-failed {
+  @apply bg-rose-500/10 text-rose-400 border border-rose-500/25;
+}
+
+.status-skipped {
+  @apply bg-slate-500/10 text-slate-400 border border-slate-500/25;
+}
