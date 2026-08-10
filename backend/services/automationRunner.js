@@ -57,7 +57,7 @@ class AutomationRunner {
     }
 
     try {
-      const chatListVisible = await this.page.isVisible('[data-testid="chat-list"], div[role="grid"], #pane-side').catch(() => false);
+      const chatListVisible = await this.page.isVisible('[data-testid="chat-list"], div[role="grid"], #pane-side, header [data-icon="chat"]').catch(() => false);
       if (chatListVisible) {
         if (fs.existsSync(qrPath)) {
           try { fs.unlinkSync(qrPath); } catch (e) {}
@@ -71,17 +71,14 @@ class AutomationRunner {
         };
       }
 
-      const qrVisible = await this.page.isVisible('canvas, [data-testid="qrcode"]').catch(() => false);
-      if (qrVisible) {
-        const qrElement = await this.page.$('canvas, [data-testid="qrcode"]');
-        if (qrElement) {
-          const uploadsDir = path.resolve(__dirname, '../../uploads');
-          if (!fs.existsSync(uploadsDir)) {
-            fs.mkdirSync(uploadsDir, { recursive: true });
-          }
-          await qrElement.screenshot({ path: qrPath }).catch(() => {});
-          qrUrl = `/uploads/qr.png?t=${Date.now()}`;
+      const qrElement = await this.page.$('canvas, [data-ref] canvas, [data-testid="qrcode"]').catch(() => null);
+      if (qrElement) {
+        const uploadsDir = path.resolve(__dirname, '../../uploads');
+        if (!fs.existsSync(uploadsDir)) {
+          fs.mkdirSync(uploadsDir, { recursive: true });
         }
+        await qrElement.screenshot({ path: qrPath }).catch(() => {});
+        qrUrl = `/uploads/qr.png?t=${Date.now()}`;
         return {
           connected: false,
           status: 'Scan QR Code Required',
