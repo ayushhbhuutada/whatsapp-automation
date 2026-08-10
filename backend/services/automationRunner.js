@@ -385,7 +385,7 @@ class AutomationRunner {
       // Fetch next pending contact for this campaign
       const contact = await get(`
         SELECT * FROM contacts 
-        WHERE campaign_id = ? AND status = "Pending" 
+        WHERE campaign_id = ? AND status = 'Pending' 
         ORDER BY id ASC LIMIT 1
       `, [campaignId]);
 
