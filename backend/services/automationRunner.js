@@ -40,7 +40,7 @@ class AutomationRunner {
     let qrUrl = fs.existsSync(qrPath) ? `/uploads/qr.png?t=${Date.now()}` : null;
 
     if (!this.browserContext || !this.page || this.page.isClosed()) {
-      const userDirSetting = await get('SELECT value FROM settings WHERE key = "browser_data_dir"');
+      const userDirSetting = await get('SELECT value FROM settings WHERE key = ?', ['browser_data_dir']);
       const defaultUserDir = process.env.LOCALAPPDATA
         ? path.join(process.env.LOCALAPPDATA, 'WhatsAppAutomation', 'browser-data')
         : path.resolve(__dirname, '../../config/browser-data');
@@ -108,13 +108,13 @@ class AutomationRunner {
 
   async connectSession() {
     if (!this.browserContext || !this.page || this.page.isClosed()) {
-      const userDirSetting = await get('SELECT value FROM settings WHERE key = "browser_data_dir"');
+      const userDirSetting = await get('SELECT value FROM settings WHERE key = ?', ['browser_data_dir']);
       const defaultUserDir = process.env.LOCALAPPDATA
         ? path.join(process.env.LOCALAPPDATA, 'WhatsAppAutomation', 'browser-data')
         : path.resolve(__dirname, '../../config/browser-data');
       const userDir = userDirSetting ? userDirSetting.value : defaultUserDir;
 
-      const headlessSetting = await get('SELECT value FROM settings WHERE key = "headless"');
+      const headlessSetting = await get('SELECT value FROM settings WHERE key = ?', ['headless']);
       const isHeadless = headlessSetting ? headlessSetting.value === 'true' : false;
 
       try {
@@ -239,7 +239,7 @@ class AutomationRunner {
   async logoutSession() {
     await this.cleanup({ closeBrowser: true });
 
-    const userDirSetting = await get('SELECT value FROM settings WHERE key = "browser_data_dir"');
+    const userDirSetting = await get('SELECT value FROM settings WHERE key = ?', ['browser_data_dir']);
     const defaultUserDir = process.env.LOCALAPPDATA
       ? path.join(process.env.LOCALAPPDATA, 'WhatsAppAutomation', 'browser-data')
       : path.resolve(__dirname, '../../config/browser-data');
@@ -277,13 +277,13 @@ class AutomationRunner {
     }
 
     // Load directories and headless setting from settings or environment
-    const userDirSetting = await get('SELECT value FROM settings WHERE key = "browser_data_dir"');
+    const userDirSetting = await get('SELECT value FROM settings WHERE key = ?', ['browser_data_dir']);
     const defaultUserDir = process.env.LOCALAPPDATA
       ? path.join(process.env.LOCALAPPDATA, 'WhatsAppAutomation', 'browser-data')
       : path.resolve(__dirname, '../../config/browser-data');
     const userDir = userDirSetting ? userDirSetting.value : defaultUserDir;
 
-    const headlessSetting = await get('SELECT value FROM settings WHERE key = "headless"');
+    const headlessSetting = await get('SELECT value FROM settings WHERE key = ?', ['headless']);
     const isHeadless = headlessSetting ? headlessSetting.value === 'true' : false;
 
     await this.log(campaignId, null, 'info', `Launching browser session (Headless: ${isHeadless})...`);
@@ -364,19 +364,19 @@ class AutomationRunner {
     if (!initialized) return;
 
     // 2. Fetch campaign configuration
-    const delaySetting = await get('SELECT value FROM settings WHERE key = "delay_seconds"');
+    const delaySetting = await get('SELECT value FROM settings WHERE key = ?', ['delay_seconds']);
     const delayMs = (delaySetting ? parseInt(delaySetting.value) || 5 : 5) * 1000;
 
-    const attachmentFolderSetting = await get('SELECT value FROM settings WHERE key = "default_attachments_dir"');
+    const attachmentFolderSetting = await get('SELECT value FROM settings WHERE key = ?', ['default_attachments_dir']);
     const defaultAttachmentDir = attachmentFolderSetting ? attachmentFolderSetting.value : path.resolve(__dirname, '../../attachments');
 
-    const sheetUrlSetting = await get('SELECT value FROM settings WHERE key = "google_sheet_url"');
+    const sheetUrlSetting = await get('SELECT value FROM settings WHERE key = ?', ['google_sheet_url']);
     const googleSheetUrl = sheetUrlSetting ? sheetUrlSetting.value : '';
 
-    const countryCodeSetting = await get('SELECT value FROM settings WHERE key = "default_country_code"');
+    const countryCodeSetting = await get('SELECT value FROM settings WHERE key = ?', ['default_country_code']);
     const defaultCountryCode = countryCodeSetting ? countryCodeSetting.value.replace(/\D/g, '') : '91';
 
-    const maxRetriesSetting = await get('SELECT value FROM settings WHERE key = "max_retries"');
+    const maxRetriesSetting = await get('SELECT value FROM settings WHERE key = ?', ['max_retries']);
     const maxRetries = maxRetriesSetting ? Math.max(0, parseInt(maxRetriesSetting.value) || 0) : 2;
 
     const startTime = Date.now();
