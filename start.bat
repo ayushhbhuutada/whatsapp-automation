@@ -18,10 +18,14 @@ if exist "%~dp0.git" (
 )
 echo.
 
-:: 1. Check for old sqlite3 v5 (incompatible with Node 26) — delete and reinstall if found
-if exist "%~dp0backend\node_modules\sqlite3\lib\binding" (
-    echo [Check] Old SQLite binary detected. Removing and reinstalling...
-    rd /s /q "%~dp0backend\node_modules" 2>nul
+:: 1. Clean up obsolete native C++ database packages if they exist
+if exist "%~dp0backend\node_modules\sqlite3" (
+    echo [Cleanup] Removing obsolete sqlite3 package...
+    rd /s /q "%~dp0backend\node_modules\sqlite3" 2>nul
+)
+if exist "%~dp0backend\node_modules\better-sqlite3" (
+    echo [Cleanup] Removing obsolete better-sqlite3 package...
+    rd /s /q "%~dp0backend\node_modules\better-sqlite3" 2>nul
 )
 
 :: 2. Auto-Detect & Install Backend Dependencies if missing

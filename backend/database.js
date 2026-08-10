@@ -1,4 +1,4 @@
-import Database from 'better-sqlite3';
+import { DatabaseSync } from 'node:sqlite';
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
@@ -22,18 +22,18 @@ if (!fs.existsSync(attachmentsDir)) {
   fs.mkdirSync(attachmentsDir, { recursive: true });
 }
 
-const db = new Database(dbPath);
+const db = new DatabaseSync(dbPath);
 console.log('Connected to the SQLite database at:', dbPath);
 
 // Enable WAL mode and foreign keys
-db.pragma('journal_mode = WAL');
-db.pragma('foreign_keys = ON');
+db.exec('PRAGMA journal_mode = WAL');
+db.exec('PRAGMA foreign_keys = ON');
 
 // Promise-based wrappers (API-compatible with old sqlite3 wrappers)
 export const run = (sql, params = []) => {
   try {
     const stmt = db.prepare(sql);
-    const result = stmt.run(params);
+    const result = stmt.run(...params);
     return Promise.resolve({ id: result.lastInsertRowid, changes: result.changes });
   } catch (err) {
     return Promise.reject(err);
@@ -43,7 +43,7 @@ export const run = (sql, params = []) => {
 export const get = (sql, params = []) => {
   try {
     const stmt = db.prepare(sql);
-    const row = stmt.get(params);
+    const row = stmt.get(...params);
     return Promise.resolve(row);
   } catch (err) {
     return Promise.reject(err);
@@ -53,7 +53,7 @@ export const get = (sql, params = []) => {
 export const all = (sql, params = []) => {
   try {
     const stmt = db.prepare(sql);
-    const rows = stmt.all(params);
+    const rows = stmt.all(...params);
     return Promise.resolve(rows);
   } catch (err) {
     return Promise.reject(err);
@@ -62,7 +62,7 @@ export const all = (sql, params = []) => {
 
 function initDb() {
   // 1. Campaigns Table
-  db.prepare(`
+  db.exec(`
     CREATE TABLE IF NOT EXISTS campaigns (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       name TEXT NOT NULL,
@@ -73,10 +73,10 @@ function initDb() {
       duration INTEGER DEFAULT 0,
       created_at TEXT DEFAULT CURRENT_TIMESTAMP
     )
-  `).run();
+  `);
 
   // 2. Contacts Table
-  db.prepare(`
+  db.exec(`
     CREATE TABLE IF NOT EXISTS contacts (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       campaign_id INTEGER,
@@ -92,18 +92,18 @@ function initDb() {
       row_index INTEGER,
       FOREIGN KEY (campaign_id) REFERENCES campaigns(id) ON DELETE CASCADE
     )
-  `).run();
+  `);
 
   // 3. Settings Table
-  db.prepare(`
+  db.exec(`
     CREATE TABLE IF NOT EXISTS settings (
       key TEXT PRIMARY KEY,
       value TEXT
     )
-  `).run();
+  `);
 
   // 4. Logs Table
-  db.prepare(`
+  db.exec(`
     CREATE TABLE IF NOT EXISTS logs (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       campaign_id INTEGER,
@@ -112,10 +112,10 @@ function initDb() {
       message TEXT,
       created_at TEXT DEFAULT CURRENT_TIMESTAMP
     )
-  `).run();
+  `);
 
   // 5. Saved Contacts (Audience Hub) Table
-  db.prepare(`
+  db.exec(`
     CREATE TABLE IF NOT EXISTS saved_contacts (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       name TEXT NOT NULL,
@@ -126,7 +126,7 @@ function initDb() {
       placeholder_data TEXT,
       created_at TEXT DEFAULT CURRENT_TIMESTAMP
     )
-  `).run();
+  `);
 
   // Initialize Default Settings
   const defaultSettings = [
