@@ -10,29 +10,20 @@ echo all saved browser session data on THIS computer.
 echo.
 pause
 
-echo.
-echo Cleaning up session data...
-
-if exist "%~dp0config\browser-data" (
-    echo Removing local config\browser-data...
-    rd /s /q "%~dp0config\browser-data"
+if exist "%~dp0..\config\browser-data" (
+    rd /s /q "%~dp0..\config\browser-data"
 )
 
 if defined LOCALAPPDATA (
     if exist "%LOCALAPPDATA%\WhatsAppAutomation\browser-data" (
-        echo Removing AppData\Local browser session...
         rd /s /q "%LOCALAPPDATA%\WhatsAppAutomation\browser-data"
     )
 )
 
-if exist "%~dp0uploads\qr.png" (
-    del /f /q "%~dp0uploads\qr.png"
+if exist "%~dp0..\uploads\qr.png" (
+    del /f /q "%~dp0..\uploads\qr.png"
 )
 
 echo.
-echo ================================================
-echo  Session Reset Complete!
-echo  Next time you run start.bat, it will ask for 
-echo  a fresh QR Code scan.
-echo ================================================
+echo Session Reset Complete! Next launch will request fresh QR scan.
 pause
