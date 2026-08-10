@@ -13,14 +13,30 @@ const credsPath = process.env.GOOGLE_APPLICATION_CREDENTIALS
   : path.resolve(__dirname, '../config/service-account.json');
 
 /**
- * Extracts Spreadsheet ID and Grid ID (gid) from a standard Google Sheets URL.
+ * Extracts Spreadsheet ID and Grid ID (gid) from a standard or published Google Sheets URL.
  */
 export function parseSheetUrl(url) {
+  if (!url || typeof url !== 'string') return { spreadsheetId: null, gid: '0' };
+  
+  const cleanUrl = url.trim();
+
+  // Published CSV or HTML links (e.g. /d/e/2PACX-.../pub)
+  if (cleanUrl.includes('/pub') || cleanUrl.includes('/pubhtml')) {
+    const pubIdMatch = cleanUrl.match(/\/d\/e\/([a-zA-Z0-9-_]+)/);
+    if (pubIdMatch) {
+      return {
+        spreadsheetId: `e/${pubIdMatch[1]}`,
+        isPublished: true,
+        gid: '0'
+      };
+    }
+  }
+
   const idRegex = /\/d\/([a-zA-Z0-9-_]+)/;
   const gidRegex = /gid=([0-9]+)/;
   
-  const idMatch = url.match(idRegex);
-  const gidMatch = url.match(gidRegex);
+  const idMatch = cleanUrl.match(idRegex);
+  const gidMatch = cleanUrl.match(gidRegex);
   
   return {
     spreadsheetId: idMatch ? idMatch[1] : null,
@@ -35,7 +51,7 @@ export function parseSheetUrl(url) {
 export async function fetchGoogleSheet(url) {
   const { spreadsheetId, gid } = parseSheetUrl(url);
   if (!spreadsheetId) {
-    throw new Error('Invalid Google Sheets URL.');
+    throw new Error('Invalid Google Sheets URL. Please check the URL format.');
   }
 
   // Attempt to use Service Account credentials if they exist
@@ -51,7 +67,6 @@ export async function fetchGoogleSheet(url) {
       
       // Get the sheet metadata to find the sheet name
       const meta = await sheets.spreadsheets.get({ spreadsheetId });
-      // Find sheet with matching gid or default to first sheet
       const targetSheet = meta.data.sheets.find(s => String(s.properties.sheetId) === String(gid)) || meta.data.sheets[0];
       const sheetName = targetSheet.properties.title;
 
@@ -66,41 +81,81 @@ export async function fetchGoogleSheet(url) {
       }
 
       // Convert arrays of rows into objects
-      const headers = rows[0].map(h => h.trim());
+      const headers = rows[0].map(h => (h !== undefined && h !== null ? String(h).trim() : ''));
       const jsonData = rows.slice(1).map(row => {
         const obj = {};
         headers.forEach((header, index) => {
-          obj[header] = row[index] !== undefined ? row[index] : '';
+          if (header) {
+            obj[header] = row[index] !== undefined ? row[index] : '';
+          }
         });
         return obj;
       });
 
       return parseJsonData(jsonData);
     } catch (apiError) {
-      console.warn('API fetch failed, falling back to public export:', apiError.message);
+      console.warn('Service Account API fetch failed, falling back to public export:', apiError.message);
     }
   }
 
   // Public CSV export fallback
   try {
     console.log('Fetching sheet as public CSV export...');
-    const exportUrl = `https://docs.google.com/spreadsheets/d/${spreadsheetId}/export?format=csv&gid=${gid}`;
-    const res = await fetch(exportUrl);
-    if (!res.ok) {
-      throw new Error(`Failed to fetch CSV: ${res.statusText}`);
+    let exportUrl = `https://docs.google.com/spreadsheets/d/${spreadsheetId}/export?format=csv&gid=${gid}`;
+    if (spreadsheetId.startsWith('e/')) {
+      exportUrl = `https://docs.google.com/spreadsheets/d/${spreadsheetId}/pub?output=csv`;
     }
+
+    const res = await fetch(exportUrl, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': 'text/csv,text/plain,*/*'
+      },
+      redirect: 'follow'
+    });
+
+    if (!res.ok) {
+      throw new Error(`Google returned HTTP status ${res.status} (${res.statusText})`);
+    }
+
     const csvText = await res.text();
-    
+
+    // Detect HTML login/permission page response
+    const cleanCsvText = csvText.trim().toLowerCase();
+    if (
+      cleanCsvText.startsWith('<!doctype html') ||
+      cleanCsvText.startsWith('<html') ||
+      cleanCsvText.includes('google-signin') ||
+      cleanCsvText.includes('servicelogin') ||
+      cleanCsvText.includes('accounts.google.com')
+    ) {
+      throw new Error(
+        'Google Sheet access denied. Please open your Google Sheet -> Click "Share" (top right) -> Change access to "Anyone with the link can view".'
+      );
+    }
+
     // Parse CSV via xlsx — raw:true to preserve full numeric precision
     const workbook = xlsx.read(csvText, { type: 'string', cellText: true, cellNF: true });
+    if (!workbook.SheetNames || workbook.SheetNames.length === 0) {
+      throw new Error('Could not parse Google Sheet content.');
+    }
+
     const sheetName = workbook.SheetNames[0];
     const worksheet = workbook.Sheets[sheetName];
     const jsonData = xlsx.utils.sheet_to_json(worksheet, { raw: true, defval: '' });
 
+    if (!jsonData || jsonData.length === 0) {
+      throw new Error('No contact data found in the spreadsheet.');
+    }
+
     return parseJsonData(jsonData);
   } catch (error) {
     console.error('Error fetching public Google Sheet:', error);
-    throw new Error('Failed to read Google Sheet. Make sure the sheet is shared as "Anyone with the link can view". Error: ' + error.message);
+    throw new Error(
+      error.message.includes('Anyone with the link can view') 
+        ? error.message 
+        : `Failed to import Google Sheet: ${error.message}`
+    );
   }
 }
 
@@ -137,11 +192,10 @@ export async function updateGoogleSheetStatus(url, rowIndex, status, errorReason
     });
 
     const headers = headerResponse.data.values ? headerResponse.data.values[0] : [];
-    let statusColIdx = headers.findIndex(h => h.trim().toLowerCase() === 'status');
-    let errorColIdx = headers.findIndex(h => h.trim().toLowerCase() === 'error reason' || h.trim().toLowerCase() === 'error_reason');
+    let statusColIdx = headers.findIndex(h => String(h).trim().toLowerCase() === 'status');
+    let errorColIdx = headers.findIndex(h => String(h).trim().toLowerCase() === 'error reason' || String(h).trim().toLowerCase() === 'error_reason');
 
     if (statusColIdx === -1) {
-      // If Status column doesn't exist, we append it at the next available column
       statusColIdx = headers.length;
       const colLetter = getColumnLetter(statusColIdx);
       await sheets.spreadsheets.values.update({
@@ -152,10 +206,8 @@ export async function updateGoogleSheetStatus(url, rowIndex, status, errorReason
       });
     }
 
-    // Convert 0-indexed column integer to spreadsheet column letters
     const statusColLetter = getColumnLetter(statusColIdx);
     
-    // Update the cell
     await sheets.spreadsheets.values.update({
       spreadsheetId,
       range: `${sheetName}!${statusColLetter}${rowIndex}`,
@@ -163,7 +215,6 @@ export async function updateGoogleSheetStatus(url, rowIndex, status, errorReason
       requestBody: { values: [[status]] }
     });
 
-    // If failed, write the error reason
     if (status === 'Failed' && errorReason) {
       if (errorColIdx === -1) {
         errorColIdx = headers.length + (statusColIdx === headers.length ? 1 : 0);
@@ -194,8 +245,6 @@ export async function updateGoogleSheetStatus(url, rowIndex, status, errorReason
 
 /**
  * Converts any cell value to a clean, full-precision string.
- * Handles JS numbers, scientific notation strings like "9.19E+11",
- * and plain text — ensuring phone numbers are never truncated.
  */
 function safeStringify(val) {
   if (val === null || val === undefined) return '';
@@ -211,7 +260,6 @@ function safeStringify(val) {
   }
 
   const str = String(val).trim();
-  // Handle scientific notation strings like "9.19E+11" or "9.18e+11"
   if (/^-?\d+(\.\d+)?[eE][+\-]?\d+$/.test(str)) {
     try {
       const n = Number(str);
@@ -228,62 +276,63 @@ function safeStringify(val) {
 
 /**
  * Normalizes rows into schema-aligned contact objects.
- * Uses safeStringify() on every value to handle scientific notation
- * and large numbers (e.g. phone numbers) without precision loss.
  */
 function parseJsonData(rows) {
-  return rows.map((row, idx) => {
-    const normalizedRow = {};
-    const placeholderData = {};
+  if (!Array.isArray(rows)) return [];
 
-    Object.entries(row).forEach(([key, val]) => {
-      const trimmedKey = key.trim();
-      const safeVal = safeStringify(val);
-      normalizedRow[trimmedKey.toLowerCase().replace(/[\s_-]+/g, '')] = safeVal;
-      placeholderData[trimmedKey] = safeVal;
-    });
+  return rows
+    .filter(row => row && typeof row === 'object')
+    .map((row, idx) => {
+      const normalizedRow = {};
+      const placeholderData = {};
 
-    const findVal = (keys) => {
-      for (const k of keys) {
-        const normK = k.replace(/[\s_-]+/g, '');
-        if (normalizedRow[normK] !== undefined && normalizedRow[normK] !== '') {
-          return normalizedRow[normK];
+      Object.entries(row).forEach(([key, val]) => {
+        const trimmedKey = key !== undefined && key !== null ? String(key).trim() : '';
+        if (!trimmedKey) return;
+        const safeVal = safeStringify(val);
+        normalizedRow[trimmedKey.toLowerCase().replace(/[\s_-]+/g, '')] = safeVal;
+        placeholderData[trimmedKey] = safeVal;
+      });
+
+      const findVal = (keys) => {
+        for (const k of keys) {
+          const normK = k.replace(/[\s_-]+/g, '');
+          if (normalizedRow[normK] !== undefined && normalizedRow[normK] !== '') {
+            return normalizedRow[normK];
+          }
+        }
+        return '';
+      };
+
+      const name = findVal(['name', 'contact name', 'recipient', 'recipient name', 'full name', 'customer', 'person', 'client']) || `Contact ${idx + 1}`;
+      let phone = findVal(['phone', 'phone number', 'phone no', 'phonenumber', 'mobile', 'mobile number', 'mobile no', 'contact', 'contact number', 'whatsapp', 'tel', 'telephone']);
+      const company = findVal(['company', 'organization', 'org', 'business']);
+      const message = findVal(['message', 'text', 'content', 'body']);
+      const attachment = findVal(['attachment', 'file', 'media', 'document']);
+
+      if (/[eE][+\-]?\d+/.test(phone)) {
+        try {
+          phone = BigInt(Math.round(Number(phone))).toString();
+        } catch {
+          const num = Number(phone);
+          if (!isNaN(num)) phone = Math.round(num).toString();
         }
       }
-      return '';
-    };
 
-    const name = findVal(['name', 'contact name', 'recipient', 'recipient name', 'full name', 'customer', 'person', 'client']) || `Contact ${idx + 1}`;
-    let phone = findVal(['phone', 'phone number', 'phone no', 'phonenumber', 'mobile', 'mobile number', 'mobile no', 'contact', 'contact number', 'whatsapp', 'tel', 'telephone']);
-    const company = findVal(['company', 'organization', 'org', 'business']);
-    const message = findVal(['message', 'text', 'content', 'body']);
-    const attachment = findVal(['attachment', 'file', 'media', 'document']);
+      const hasPlus = phone.startsWith('+');
+      phone = phone.replace(/\D/g, '');
+      if (hasPlus) phone = '+' + phone;
 
-    // Safety net: catch any scientific notation that slipped through safeStringify
-    if (/[eE][+\-]?\d+/.test(phone)) {
-      try {
-        phone = BigInt(Math.round(Number(phone))).toString();
-      } catch {
-        const num = Number(phone);
-        if (!isNaN(num)) phone = Math.round(num).toString();
-      }
-    }
-
-    // Clean phone number — preserve leading + if present
-    const hasPlus = phone.startsWith('+');
-    phone = phone.replace(/\D/g, '');
-    if (hasPlus) phone = '+' + phone;
-
-    return {
-      name,
-      phone,
-      company,
-      message,
-      attachment,
-      placeholderData,
-      rowIndex: idx + 2 // 1-indexed, +1 for headers
-    };
-  });
+      return {
+        name,
+        phone,
+        company,
+        message,
+        attachment,
+        placeholderData,
+        rowIndex: idx + 2
+      };
+    });
 }
 
 /**
