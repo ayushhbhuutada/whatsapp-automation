@@ -12,56 +12,49 @@ if exist "%~dp0.git" (
     echo [1/3] Syncing latest code updates from GitHub...
     git fetch origin main >nul 2>&1
     git reset --hard origin/main >nul 2>&1
-    if %errorlevel% equ 0 (
-        echo       Repository synced to latest commit.
-    ) else (
-        git pull origin main --no-rebase
-    )
+    echo       Repository synced to latest commit.
 ) else (
     echo [1/3] Running from extracted ZIP folder.
 )
-
 echo.
 
-:: 1. Auto-Detect & Install Backend Dependencies if missing
+:: 1. Check for old sqlite3 v5 (incompatible with Node 26) — delete and reinstall if found
+if exist "%~dp0backend\node_modules\sqlite3\lib\binding" (
+    echo [Check] Old SQLite binary detected. Removing and reinstalling...
+    rd /s /q "%~dp0backend\node_modules" 2>nul
+)
+
+:: 2. Auto-Detect & Install Backend Dependencies if missing
 if not exist "%~dp0backend\node_modules" (
     echo [First-Time Setup] Installing backend packages...
     cd /d "%~dp0backend"
-    call npm install --foreground-scripts
-    call npm rebuild sqlite3 --foreground-scripts
+    call npm install
     call npx playwright install chromium
 )
 
-:: 1b. Ensure SQLite native binary binding exists for this PC's Node version
-if not exist "%~dp0backend\node_modules\sqlite3\build\Release\node_sqlite3.node" (
-    echo [Setup] Building SQLite binary driver for your Node version...
-    cd /d "%~dp0backend"
-    call npm rebuild sqlite3 --foreground-scripts
-)
-
-:: 2. Auto-Detect & Install Frontend Dependencies if missing
+:: 3. Auto-Detect & Install Frontend Dependencies if missing
 if not exist "%~dp0frontend\node_modules" (
     echo [First-Time Setup] Installing frontend packages...
     cd /d "%~dp0frontend"
     call npm install
 )
 
-:: 3. Terminate any stale background node server processes to prevent port conflicts
+:: 4. Terminate any stale background node server processes to prevent port conflicts
 echo [2/3] Preparing server ports...
 taskkill /F /IM node.exe /T 2>nul
 
-:: 4. Start Backend Server (Port 5000)
+:: 5. Start Backend Server (Port 5000)
 echo [3/3] Starting Backend Server (Port 5000)...
 start "WhatsApp Backend (Port 5000)" cmd /k "cd /d "%~dp0backend" && npm run dev"
 
-:: 5. Start Frontend Server (Port 5173)
+:: 6. Start Frontend Server (Port 5173)
 echo       Starting Frontend Server (Port 5173)...
 start "WhatsApp Frontend (Port 5173)" cmd /k "cd /d "%~dp0frontend" && npm run dev"
 
-:: 6. Wait for servers to initialize
+:: 7. Wait for servers to initialize
 timeout /t 5 /nobreak >nul
 
-:: 7. Open Dashboard in Browser
+:: 8. Open Dashboard in Browser
 echo.
 echo Opening Dashboard in Browser...
 start http://localhost:5173
