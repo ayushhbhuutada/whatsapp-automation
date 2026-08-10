@@ -45,6 +45,16 @@ const server = app.listen(PORT, () => {
   console.log(`WhatsApp Automation API Server running on port ${PORT}`);
 });
 
+server.on('error', (error) => {
+  if (error.code === 'EADDRINUSE') {
+    console.error(`\n❌ ERROR: Port ${PORT} is already in use by another process!`);
+    console.error(`Please close any existing "WhatsApp Backend" command prompt window or run 'stop_all.bat' to free port ${PORT}.\n`);
+  } else {
+    console.error('❌ Server startup error:', error);
+  }
+  process.exit(1);
+});
+
 // Graceful shutdown handling
 const shutdown = async () => {
   console.log('Shutting down server...');
