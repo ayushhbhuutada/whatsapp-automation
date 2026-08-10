@@ -207,7 +207,7 @@ router.delete('/audience/contacts/:id', async (req, res) => {
 
 router.get('/audience/tags', async (req, res) => {
   try {
-    const rows = await all('SELECT DISTINCT tag FROM saved_contacts WHERE tag IS NOT NULL AND tag != "" ORDER BY tag ASC');
+    const rows = await all("SELECT DISTINCT tag FROM saved_contacts WHERE tag IS NOT NULL AND tag != '' ORDER BY tag ASC");
     const tags = rows.map(r => r.tag);
     res.json(tags);
   } catch (error) {
@@ -238,7 +238,7 @@ router.post('/audience/import-sheet', async (req, res) => {
       ]);
       count++;
     }
-    await run('INSERT OR REPLACE INTO settings (key, value) VALUES ("google_sheet_url", ?)', [sheetUrl]);
+    await run("INSERT OR REPLACE INTO settings (key, value) VALUES ('google_sheet_url', ?)", [sheetUrl]);
     res.json({ message: `Successfully imported ${count} contacts from Google Sheet into tag "${tag}".`, count });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -313,7 +313,7 @@ router.post('/campaigns', (req, res, next) => {
         return res.status(400).json({ error: 'Please provide a Google Sheets URL.' });
       }
       contacts = await fetchGoogleSheet(sheetUrl);
-      await run('INSERT OR REPLACE INTO settings (key, value) VALUES ("google_sheet_url", ?)', [sheetUrl]);
+      await run("INSERT OR REPLACE INTO settings (key, value) VALUES ('google_sheet_url', ?)", [sheetUrl]);
     } else if (source === 'file') {
       if (!req.file) {
         return res.status(400).json({ error: 'Please upload a spreadsheet file.' });

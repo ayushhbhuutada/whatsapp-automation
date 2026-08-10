@@ -157,14 +157,14 @@ class AutomationRunner {
     this.keepRunning = true;
 
     // Update campaign status in database
-    await run('UPDATE campaigns SET status = "Sending" WHERE id = ?', [campaignId]);
+    await run("UPDATE campaigns SET status = 'Sending' WHERE id = ?", [campaignId]);
     await this.log(campaignId, null, 'info', 'Starting campaign automation loop.');
 
     // Run async loop
     this.runLoop(campaignId).catch(async (error) => {
       console.error('Error in automation loop:', error);
       this.status = 'Failed';
-      await run('UPDATE campaigns SET status = "Stopped" WHERE id = ?', [campaignId]);
+      await run("UPDATE campaigns SET status = 'Stopped' WHERE id = ?", [campaignId]);
       await this.log(campaignId, null, 'error', `Automation loop crashed: ${error.message}`);
       await this.cleanup();
     });
@@ -176,7 +176,7 @@ class AutomationRunner {
     }
     this.status = 'Paused';
     this.keepRunning = false;
-    await run('UPDATE campaigns SET status = "Paused" WHERE id = ?', [campaignId]);
+    await run("UPDATE campaigns SET status = 'Paused' WHERE id = ?", [campaignId]);
     await this.log(campaignId, null, 'info', 'Campaign execution paused by user.');
   }
 
@@ -186,14 +186,14 @@ class AutomationRunner {
     }
     this.status = 'Running';
     this.keepRunning = true;
-    await run('UPDATE campaigns SET status = "Sending" WHERE id = ?', [campaignId]);
+    await run("UPDATE campaigns SET status = 'Sending' WHERE id = ?", [campaignId]);
     await this.log(campaignId, null, 'info', 'Campaign execution resumed.');
     
     // Restart loop
     this.runLoop(campaignId).catch(async (error) => {
       console.error('Error in automation loop:', error);
       this.status = 'Failed';
-      await run('UPDATE campaigns SET status = "Stopped" WHERE id = ?', [campaignId]);
+      await run("UPDATE campaigns SET status = 'Stopped' WHERE id = ?", [campaignId]);
       await this.log(campaignId, null, 'error', `Automation loop crashed: ${error.message}`);
       await this.cleanup();
     });
@@ -205,7 +205,7 @@ class AutomationRunner {
     }
     this.status = 'Stopped';
     this.keepRunning = false;
-    await run('UPDATE campaigns SET status = "Stopped" WHERE id = ?', [campaignId]);
+    await run("UPDATE campaigns SET status = 'Stopped' WHERE id = ?", [campaignId]);
     await this.log(campaignId, null, 'info', 'Campaign execution stopped by user.');
     await this.cleanup();
   }
@@ -341,7 +341,7 @@ class AutomationRunner {
     if (!isLoggedIn) {
       await this.log(campaignId, null, 'error', 'WhatsApp login timeout. Session expired or QR code not scanned.');
       this.status = 'Paused';
-      await run('UPDATE campaigns SET status = "Paused" WHERE id = ?', [campaignId]);
+      await run("UPDATE campaigns SET status = 'Paused' WHERE id = ?", [campaignId]);
       await this.cleanup();
       return false;
     }
@@ -394,7 +394,7 @@ class AutomationRunner {
         await this.log(campaignId, null, 'info', 'All messages processed. Waiting for network sync...');
         await new Promise(r => setTimeout(r, 4000));
 
-        await run('UPDATE campaigns SET status = "Completed" WHERE id = ?', [campaignId]);
+        await run("UPDATE campaigns SET status = 'Completed' WHERE id = ?", [campaignId]);
         
         // Calculate duration and updates
         const durationSeconds = Math.round((Date.now() - startTime) / 1000);
@@ -412,8 +412,8 @@ class AutomationRunner {
       // Check pause / stop before starting contact
       if (!this.keepRunning) break;
 
-      await run('UPDATE contacts SET status = "Sending" WHERE id = ?', [contact.id]);
-      await run('UPDATE campaigns SET sent_count = (SELECT COUNT(*) FROM contacts WHERE campaign_id = ? AND status = "Sent"), failed_count = (SELECT COUNT(*) FROM contacts WHERE campaign_id = ? AND status = "Failed") WHERE id = ?', [campaignId, campaignId, campaignId]);
+      await run("UPDATE contacts SET status = 'Sending' WHERE id = ?", [contact.id]);
+      await run("UPDATE campaigns SET sent_count = (SELECT COUNT(*) FROM contacts WHERE campaign_id = ? AND status = 'Sent'), failed_count = (SELECT COUNT(*) FROM contacts WHERE campaign_id = ? AND status = 'Failed') WHERE id = ?", [campaignId, campaignId, campaignId]);
 
       // Normalize phone number (apply default country code if 10-digit number)
       let cleanPhone = contact.phone.replace(/\D/g, '');
@@ -740,7 +740,7 @@ class AutomationRunner {
         const now = new Date().toISOString();
         await run(`
           UPDATE contacts 
-          SET status = "Sent", sent_at = ? 
+          SET status = 'Sent', sent_at = ? 
           WHERE id = ?
         `, [now, contact.id]);
 
@@ -754,7 +754,7 @@ class AutomationRunner {
         console.error(`Error sending message to ${contact.name}:`, errorMsg);
         await run(`
           UPDATE contacts 
-          SET status = "Failed", error_reason = ? 
+          SET status = 'Failed', error_reason = ? 
           WHERE id = ?
         `, [errorMsg, contact.id]);
 
@@ -772,7 +772,7 @@ class AutomationRunner {
       }
 
       // Update campaign stats
-      await run('UPDATE campaigns SET sent_count = (SELECT COUNT(*) FROM contacts WHERE campaign_id = ? AND status = "Sent"), failed_count = (SELECT COUNT(*) FROM contacts WHERE campaign_id = ? AND status = "Failed") WHERE id = ?', [campaignId, campaignId, campaignId]);
+      await run("UPDATE campaigns SET sent_count = (SELECT COUNT(*) FROM contacts WHERE campaign_id = ? AND status = 'Sent'), failed_count = (SELECT COUNT(*) FROM contacts WHERE campaign_id = ? AND status = 'Failed') WHERE id = ?", [campaignId, campaignId, campaignId]);
 
       // Delay between messages
       if (this.keepRunning) {
