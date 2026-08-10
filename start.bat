@@ -19,7 +19,6 @@ if exist "%~dp0.git" (
     )
 ) else (
     echo [1/3] Running from extracted ZIP folder.
-    echo       (Tip: Clone via 'git clone https://github.com/ayushhbhuutada/whatsapp-automation.git' for auto-updates)
 )
 
 echo.
@@ -28,8 +27,16 @@ echo.
 if not exist "%~dp0backend\node_modules" (
     echo [First-Time Setup] Installing backend packages...
     cd /d "%~dp0backend"
-    call npm install
+    call npm install --foreground-scripts
+    call npm rebuild sqlite3 --foreground-scripts
     call npx playwright install chromium
+)
+
+:: 1b. Ensure SQLite native binary binding exists for this PC's Node version
+if not exist "%~dp0backend\node_modules\sqlite3\build\Release\node_sqlite3.node" (
+    echo [Setup] Building SQLite binary driver for your Node version...
+    cd /d "%~dp0backend"
+    call npm rebuild sqlite3 --foreground-scripts
 )
 
 :: 2. Auto-Detect & Install Frontend Dependencies if missing
