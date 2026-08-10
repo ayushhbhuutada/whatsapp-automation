@@ -7,6 +7,13 @@ echo     WhatsApp Automation Suite - Launching...
 echo ================================================
 echo.
 
+:: 0. Auto-Check & Pull Latest Updates from GitHub
+where git >nul 2>nul
+if %errorlevel% equ 0 (
+    echo [1/3] Checking for latest updates from GitHub...
+    git pull origin main 2>nul
+)
+
 :: 1. Auto-Detect & Install Backend Dependencies if missing
 if not exist "%~dp0backend\node_modules" (
     echo [First-Time Setup] Installing backend packages...
@@ -23,11 +30,11 @@ if not exist "%~dp0frontend\node_modules" (
 )
 
 :: 3. Terminate any stale background node server processes to prevent port conflicts
-echo [1/2] Freeing server ports...
+echo [2/3] Preparing server ports...
 taskkill /F /IM node.exe /T 2>nul
 
 :: 4. Start Backend Server (Port 5000)
-echo [2/2] Starting application servers...
+echo [3/3] Starting application servers...
 start "WhatsApp Backend" /min cmd /c "cd /d "%~dp0backend" && npm run dev"
 
 :: 5. Start Frontend Server (Port 5173)
