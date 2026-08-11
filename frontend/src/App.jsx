@@ -1816,6 +1816,7 @@ function SettingsView({ settings, onSave }) {
   const [headless, setHeadless] = useState(false);
   const [attachmentsDir, setAttachmentsDir] = useState('');
   const [enableNotifications, setEnableNotifications] = useState(true);
+  const [keepBrowserOpen, setKeepBrowserOpen] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [statusMessage, setStatusMessage] = useState(null);
 
@@ -1827,6 +1828,7 @@ function SettingsView({ settings, onSave }) {
     if (settings.headless !== undefined) setHeadless(settings.headless === 'true');
     if (settings.default_attachments_dir) setAttachmentsDir(settings.default_attachments_dir);
     if (settings.enable_notifications) setEnableNotifications(settings.enable_notifications === 'true');
+    if (settings.keep_browser_open_after_campaign !== undefined) setKeepBrowserOpen(settings.keep_browser_open_after_campaign === 'true');
   }, [settings]);
 
   const handleSubmit = async (e) => {
@@ -1841,7 +1843,8 @@ function SettingsView({ settings, onSave }) {
         default_country_code: defaultCountryCode,
         headless: headless ? 'true' : 'false',
         default_attachments_dir: attachmentsDir,
-        enable_notifications: enableNotifications ? 'true' : 'false'
+        enable_notifications: enableNotifications ? 'true' : 'false',
+        keep_browser_open_after_campaign: keepBrowserOpen ? 'true' : 'false'
       });
       onSave();
       setStatusMessage({ type: 'success', text: 'Configuration saved successfully.' });
@@ -1929,6 +1932,21 @@ function SettingsView({ settings, onSave }) {
             className="w-full glass-input rounded-xl px-4 py-3 text-slate-200 text-sm font-mono"
           />
           <span className="text-[10px] text-slate-500 block">Local filesystem directory folder where documents, PDFs, or images are located.</span>
+        </div>
+
+        {/* Keep Browser Open checkbox */}
+        <div className="flex items-center gap-3 bg-slate-900/35 border border-slate-900 rounded-xl p-4">
+          <input
+            id="keepBrowserOpenMode"
+            type="checkbox"
+            checked={keepBrowserOpen}
+            onChange={(e) => setKeepBrowserOpen(e.target.checked)}
+            className="w-4 h-4 text-emerald-600 bg-slate-900 border-slate-800 rounded focus:ring-emerald-500 focus:ring-2 focus:ring-offset-slate-950"
+          />
+          <div>
+            <label htmlFor="keepBrowserOpenMode" className="text-sm font-semibold text-slate-200 block cursor-pointer">Keep WhatsApp Window Open After Campaign Completes</label>
+            <span className="text-[10px] text-slate-500">Leaves the WhatsApp Web browser window open when all messages finish so you can inspect chat delivery or close it manually.</span>
+          </div>
         </div>
 
         {/* Headless Browser checkbox */}

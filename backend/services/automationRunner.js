@@ -409,8 +409,11 @@ class AutomationRunner {
           WHERE id = ?
         `, [durationSeconds, campaignId]);
         
-        await this.log(campaignId, null, 'info', 'Campaign completed successfully. Keeping WhatsApp Web window open for slow network delivery. Please close it manually when finished.');
-        await this.cleanup({ closeBrowser: false });
+        const keepOpenSetting = await get('SELECT value FROM settings WHERE key = ?', ['keep_browser_open_after_campaign']);
+        const keepOpen = keepOpenSetting ? keepOpenSetting.value !== 'false' : true;
+
+        await this.log(campaignId, null, 'info', `Campaign completed successfully. ${keepOpen ? 'WhatsApp Web window kept open for delivery sync.' : 'Closing browser as configured in settings.'}`);
+        await this.cleanup({ closeBrowser: !keepOpen });
         break;
       }
 

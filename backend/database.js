@@ -197,7 +197,8 @@ function initDb() {
     { key: 'google_sheet_url', value: '' },
     { key: 'enable_notifications', value: 'true' },
     { key: 'default_country_code', value: '91' },
-    { key: 'headless', value: 'false' }
+    { key: 'headless', value: 'false' },
+    { key: 'keep_browser_open_after_campaign', value: 'true' }
   ];
 
   const insertSetting = db.prepare(`INSERT OR IGNORE INTO settings (user_id, key, value) VALUES (?, ?, ?)`);
