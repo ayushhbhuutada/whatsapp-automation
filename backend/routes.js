@@ -412,7 +412,7 @@ router.get('/campaigns', async (req, res) => {
 });
 
 router.post('/campaigns', (req, res, next) => {
-  upload.single('file')(req, res, (err) => {
+  upload.fields([{ name: 'file', maxCount: 1 }, { name: 'attachments', maxCount: 10 }])(req, res, (err) => {
     if (err) {
       if (req.body && req.body.source !== 'file') {
         return next();
@@ -424,6 +424,14 @@ router.post('/campaigns', (req, res, next) => {
 }, async (req, res) => {
   const { name, template = '', source, sheetUrl, tag, rawText, attachmentPath } = req.body;
   const cleanAttachment = attachmentPath ? String(attachmentPath).trim().replace(/^["']+|["']+$|^\s*["']|["']\s*$/g, '').trim() : '';
+
+  // Collect uploaded attachment files if present
+  let uploadedAttachmentsStr = '';
+  if (req.files && req.files['attachments'] && req.files['attachments'].length > 0) {
+    uploadedAttachmentsStr = req.files['attachments'].map(f => f.filename).join(', ');
+  }
+
+  const combinedAttachment = [cleanAttachment, uploadedAttachmentsStr].filter(Boolean).join(', ');
 
   if (!name) {
     return res.status(400).json({ error: 'Campaign name is required.' });
@@ -442,7 +450,7 @@ router.post('/campaigns', (req, res, next) => {
         phone: r.phone,
         company: r.company || '',
         message: '',
-        attachment: cleanAttachment || '',
+        attachment: combinedAttachment || '',
         placeholderData: r.placeholder_data ? JSON.parse(r.placeholder_data) : { name: r.name, phone: r.phone, company: r.company },
         rowIndex: idx + 1
       }));
@@ -453,7 +461,7 @@ router.post('/campaigns', (req, res, next) => {
         phone: r.phone,
         company: r.company || '',
         message: '',
-        attachment: cleanAttachment || '',
+        attachment: combinedAttachment || '',
         placeholderData: r.placeholder_data ? JSON.parse(r.placeholder_data) : { name: r.name, phone: r.phone, company: r.company },
         rowIndex: idx + 1
       }));
@@ -469,11 +477,12 @@ router.post('/campaigns', (req, res, next) => {
       contacts = await fetchGoogleSheet(sheetUrl);
       await run("INSERT OR REPLACE INTO settings (user_id, key, value) VALUES (?, 'google_sheet_url', ?)", [req.user.id, sheetUrl]);
     } else if (source === 'file') {
-      if (!req.file) {
+      const excelFile = req.file || (req.files && req.files['file'] && req.files['file'][0]);
+      if (!excelFile) {
         return res.status(400).json({ error: 'Please upload a spreadsheet file.' });
       }
-      contacts = parseSpreadsheet(req.file.path);
-      fs.unlink(req.file.path, () => {});
+      contacts = parseSpreadsheet(excelFile.path);
+      fs.unlink(excelFile.path, () => {});
     } else {
       return res.status(400).json({ error: 'Invalid contact source selected.' });
     }
@@ -498,7 +507,7 @@ router.post('/campaigns', (req, res, next) => {
       }
       
       const rawContactAttach = contact.attachment ? String(contact.attachment).trim().replace(/^["']+|["']+$|^\s*["']|["']\s*$/g, '').trim() : '';
-      const finalAttachment = rawContactAttach || cleanAttachment || '';
+      const finalAttachment = [rawContactAttach, combinedAttachment].filter(Boolean).join(', ');
 
       await run(`
         INSERT INTO contacts (user_id, campaign_id, name, phone, company, message_template, placeholder_data, attachment_path, status, row_index)

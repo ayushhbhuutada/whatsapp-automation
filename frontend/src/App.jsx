@@ -1339,6 +1339,7 @@ function CreateCampaignView({ onSuccess, settings }) {
   const [sheetUrl, setSheetUrl] = useState('');
   const [rawText, setRawText] = useState('');
   const [attachmentPath, setAttachmentPath] = useState('');
+  const [attachmentFiles, setAttachmentFiles] = useState([]);
   const [file, setFile] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formError, setFormError] = useState(null);
@@ -1377,6 +1378,10 @@ function CreateCampaignView({ onSuccess, settings }) {
     formData.append('template', template);
     formData.append('source', source);
     formData.append('attachmentPath', attachmentPath);
+
+    if (attachmentFiles && attachmentFiles.length > 0) {
+      Array.from(attachmentFiles).forEach(f => formData.append('attachments', f));
+    }
 
     if (source === 'group') formData.append('tag', selectedTag);
     if (source === 'sheet') formData.append('sheetUrl', sheetUrl);
@@ -1569,17 +1574,37 @@ function CreateCampaignView({ onSuccess, settings }) {
           <span className="text-[10px] text-slate-500 block">Use double braces like &#123;&#123;Name&#125;&#125; or &#123;&#123;Company&#125;&#125; for automatic recipient variable replacement.</span>
         </div>
 
-        {/* Optional Attachment File */}
-        <div className="space-y-1.5">
-          <label className="text-sm font-semibold text-slate-300">Campaign Attachment (Optional Image/PDF)</label>
-          <input
-            type="text"
-            placeholder="e.g. brochure.pdf or image.jpg (file in attachments folder)"
-            value={attachmentPath}
-            onChange={(e) => setAttachmentPath(e.target.value)}
-            className="w-full glass-input rounded-xl px-4 py-3 text-slate-200 text-sm font-mono"
-          />
-          <span className="text-[10px] text-slate-500 block">Filename or absolute path of the image/PDF/media file to attach for all recipients in this campaign.</span>
+        {/* Optional Multiple Attachments */}
+        <div className="space-y-3 p-4 bg-slate-900/40 border border-slate-800 rounded-xl">
+          <label className="text-sm font-semibold text-slate-300 block">Campaign Attachments (Multiple Images, Videos, or PDFs)</label>
+
+          <div className="space-y-2">
+            <span className="text-xs text-slate-400 font-medium block">Option A: Upload Multiple Files from Device</span>
+            <input
+              type="file"
+              multiple
+              accept="image/*,video/*,.pdf,.doc,.docx,.xls,.xlsx"
+              onChange={(e) => setAttachmentFiles(e.target.files)}
+              className="w-full text-xs text-slate-400 file:mr-3 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-emerald-500/20 file:text-emerald-400 hover:file:bg-emerald-500/30 cursor-pointer"
+            />
+            {attachmentFiles && attachmentFiles.length > 0 && (
+              <p className="text-xs text-emerald-400 font-semibold">
+                ✓ {attachmentFiles.length} file(s) selected: {Array.from(attachmentFiles).map(f => f.name).join(', ')}
+              </p>
+            )}
+          </div>
+
+          <div className="space-y-1.5 pt-2 border-t border-slate-800/60">
+            <span className="text-xs text-slate-400 font-medium block">Option B: Or Enter Comma-Separated Filenames / Paths</span>
+            <input
+              type="text"
+              placeholder="e.g. catalog.pdf, promo.jpg, video.mp4"
+              value={attachmentPath}
+              onChange={(e) => setAttachmentPath(e.target.value)}
+              className="w-full glass-input rounded-xl px-4 py-2.5 text-slate-200 text-xs font-mono"
+            />
+            <span className="text-[10px] text-slate-500 block">Separate multiple file names or relative paths in the attachments folder using commas.</span>
+          </div>
         </div>
 
         {template.trim() && (
