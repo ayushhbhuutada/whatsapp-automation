@@ -148,26 +148,31 @@ class AutomationRunner {
   }
 
   async startCampaign(campaignId) {
-    if (this.status === 'Running') {
-      throw new Error('Automation is already running.');
+    if (this.status === 'Running' || this.isStarting) {
+      throw new Error('Automation is already starting or running.');
     }
 
-    this.currentCampaignId = campaignId;
-    this.status = 'Running';
-    this.keepRunning = true;
+    this.isStarting = true;
+    try {
+      this.currentCampaignId = campaignId;
+      this.status = 'Running';
+      this.keepRunning = true;
 
-    // Update campaign status in database
-    await run("UPDATE campaigns SET status = 'Sending' WHERE id = ?", [campaignId]);
-    await this.log(campaignId, null, 'info', 'Starting campaign automation loop.');
+      // Update campaign status in database
+      await run("UPDATE campaigns SET status = 'Sending' WHERE id = ?", [campaignId]);
+      await this.log(campaignId, null, 'info', 'Starting campaign automation loop.');
 
-    // Run async loop
-    this.runLoop(campaignId).catch(async (error) => {
-      console.error('Error in automation loop:', error);
-      this.status = 'Failed';
-      await run("UPDATE campaigns SET status = 'Stopped' WHERE id = ?", [campaignId]);
-      await this.log(campaignId, null, 'error', `Automation loop crashed: ${error.message}`);
-      await this.cleanup();
-    });
+      // Run async loop
+      this.runLoop(campaignId).catch(async (error) => {
+        console.error('Error in automation loop:', error);
+        this.status = 'Failed';
+        await run("UPDATE campaigns SET status = 'Stopped' WHERE id = ?", [campaignId]);
+        await this.log(campaignId, null, 'error', `Automation loop crashed: ${error.message}`);
+        await this.cleanup();
+      });
+    } finally {
+      this.isStarting = false;
+    }
   }
 
   async pauseCampaign(campaignId) {
@@ -493,12 +498,24 @@ class AutomationRunner {
           // Handle attachment if defined
           if (contact.attachment_path && String(contact.attachment_path).trim()) {
             let rawPath = String(contact.attachment_path).trim().replace(/^["']+|["']+$|^\s*["']|["']\s*$/g, '').trim();
-            const fullPath = path.isAbsolute(rawPath) 
-              ? rawPath 
+            
+            const allowedDirs = [
+              path.resolve(defaultAttachmentDir),
+              path.resolve(__dirname, '../../uploads'),
+              path.resolve(__dirname, '../../attachments')
+            ];
+
+            let fullPath = path.isAbsolute(rawPath) 
+              ? path.resolve(rawPath) 
               : path.resolve(defaultAttachmentDir, rawPath);
 
+            const isWithinAllowed = allowedDirs.some(dir => fullPath.startsWith(dir));
+            if (!isWithinAllowed) {
+              fullPath = path.resolve(defaultAttachmentDir, path.basename(rawPath));
+            }
+
             if (!fs.existsSync(fullPath)) {
-              throw new Error(`Attachment file not found at: ${fullPath}`);
+              throw new Error(`Attachment file not found at: ${path.basename(fullPath)}`);
             }
 
             await this.log(campaignId, contact.id, 'info', `Attaching file: ${path.basename(fullPath)}...`);

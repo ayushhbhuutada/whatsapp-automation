@@ -1,5 +1,8 @@
+import fs from 'fs';
 import express from 'express';
 import cors from 'cors';
+import helmet from 'helmet';
+import rateLimit from 'express-rate-limit';
 import dotenv from 'dotenv';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -14,15 +17,40 @@ const __dirname = path.dirname(__filename);
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-// Enable CORS for frontend web browser requests
+// Apply security headers
+app.use(helmet({
+  contentSecurityPolicy: false, // Allow inline scripts/styles for frontend React SPA
+  crossOriginResourcePolicy: { policy: 'cross-origin' }
+}));
+
+// Rate limiting for auth endpoints (max 15 login/register attempts per 15 minutes)
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 15,
+  message: { error: 'Too many login or registration attempts. Please try again in 15 minutes.' }
+});
+
+// General API rate limiter (max 300 requests per 15 minutes per IP)
+const apiLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 300,
+  message: { error: 'Rate limit exceeded. Please try again later.' }
+});
+
+// Enable CORS with configurable origin
+const allowedOrigin = process.env.CORS_ORIGIN || '*';
 app.use(cors({
-  origin: '*',
+  origin: allowedOrigin,
   methods: ['GET', 'POST', 'PUT', 'DELETE'],
   allowedHeaders: ['Content-Type', 'Authorization']
 }));
 
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+
+app.use('/api/auth/login', authLimiter);
+app.use('/api/auth/register', authLimiter);
+app.use('/api', apiLimiter);
 
 // Register API Routes
 app.use('/api', apiRouter);
@@ -33,6 +61,18 @@ app.use('/uploads', express.static(uploadsDir));
 
 const attachmentsDir = path.resolve(__dirname, '../attachments');
 app.use('/attachments', express.static(attachmentsDir));
+
+// Serve frontend production build statically in production mode
+const frontendDistDir = path.resolve(__dirname, '../frontend/dist');
+if (fs.existsSync(frontendDistDir)) {
+  app.use(express.static(frontendDistDir));
+  app.get('*', (req, res, next) => {
+    if (req.path.startsWith('/api') || req.path.startsWith('/uploads') || req.path.startsWith('/attachments')) {
+      return next();
+    }
+    res.sendFile(path.join(frontendDistDir, 'index.html'));
+  });
+}
 
 // Fallback error handler
 app.use((err, req, res, next) => {

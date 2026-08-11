@@ -34,8 +34,18 @@ import {
   ShieldCheck
 } from 'lucide-react';
 
-const API_HOST = typeof window !== 'undefined' ? (window.location.hostname || '127.0.0.1') : '127.0.0.1';
-const API_SERVER = `http://${API_HOST}:5000`;
+const getApiServer = () => {
+  if (typeof window === 'undefined') return 'http://127.0.0.1:5000';
+  const protocol = window.location.protocol;
+  const hostname = window.location.hostname || '127.0.0.1';
+  // If running via Vite dev server (port 5173), target backend at 5000
+  if (window.location.port === '5173') {
+    return `${protocol}//${hostname}:5000`;
+  }
+  return window.location.origin;
+};
+
+const API_SERVER = getApiServer();
 const API_BASE = `${API_SERVER}/api`;
 
 export default function App() {
@@ -51,16 +61,69 @@ export default function App() {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [systemAlert, setSystemAlert] = useState(null);
 
+  // Authentication State
+  const [user, setUser] = useState(() => {
+    const saved = localStorage.getItem('user');
+    return saved ? JSON.parse(saved) : null;
+  });
+  const [token, setToken] = useState(() => localStorage.getItem('token') || '');
+  const [authMode, setAuthMode] = useState('login'); // 'login' or 'register'
+  const [authFormData, setAuthFormData] = useState({ name: '', email: '', password: '' });
+  const [authError, setAuthError] = useState('');
+
+  // Configure Axios default header and 401 interceptor
+  useEffect(() => {
+    if (token) {
+      axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+    } else {
+      delete axios.defaults.headers.common['Authorization'];
+    }
+  }, [token]);
+
+  // Validate stored token on load
+  useEffect(() => {
+    if (token) {
+      axios.get(`${API_BASE}/auth/me`)
+        .then(res => setUser(res.data.user))
+        .catch(() => handleLogout());
+    }
+  }, []);
+
+  // Auth Handlers
+  const handleAuthSubmit = async (e) => {
+    e.preventDefault();
+    setAuthError('');
+    try {
+      const endpoint = authMode === 'login' ? `${API_BASE}/auth/login` : `${API_BASE}/auth/register`;
+      const res = await axios.post(endpoint, authFormData);
+      setToken(res.data.token);
+      setUser(res.data.user);
+      localStorage.setItem('token', res.data.token);
+      localStorage.setItem('user', JSON.stringify(res.data.user));
+    } catch (err) {
+      setAuthError(err.response?.data?.error || 'Authentication failed. Please check your credentials.');
+    }
+  };
+
+  const handleLogout = () => {
+    setToken('');
+    setUser(null);
+    localStorage.removeItem('token');
+    localStorage.removeItem('user');
+  };
+
   // Polling interval reference for campaigns
   const pollRef = useRef(null);
 
   // Load initial data
   useEffect(() => {
-    fetchSettings();
-    fetchCampaigns();
-    fetchAutomationStatus();
-    fetchSessionData();
-  }, []);
+    if (token) {
+      fetchSettings();
+      fetchCampaigns();
+      fetchAutomationStatus();
+      fetchSessionData();
+    }
+  }, [token]);
 
   // Poll automation status and active campaign details
   useEffect(() => {
@@ -233,6 +296,98 @@ export default function App() {
 
   const selectedCampaign = campaigns.find(c => c.id.toString() === selectedCampaignId);
 
+  // Render Authentication Portal if not logged in
+  if (!user || !token) {
+    return (
+      <div className="min-h-screen bg-slate-950 flex items-center justify-center p-4">
+        <div className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-2xl p-8 shadow-2xl">
+          <div className="flex items-center justify-center gap-3 mb-6">
+            <div className="w-12 h-12 bg-emerald-500 rounded-2xl flex items-center justify-center text-white shadow-lg shadow-emerald-500/20">
+              <Send size={26} className="rotate-45" />
+            </div>
+            <div>
+              <h1 className="font-heading text-xl font-bold tracking-tight text-white">Whatsapp Automator</h1>
+              <span className="text-xs text-emerald-400 font-semibold tracking-widest uppercase">Multi-Tenant SaaS Portal</span>
+            </div>
+          </div>
+
+          <div className="flex bg-slate-950 p-1 rounded-xl mb-6 border border-slate-800">
+            <button
+              onClick={() => { setAuthMode('login'); setAuthError(''); }}
+              className={`flex-1 py-2 text-sm font-semibold rounded-lg transition-all ${
+                authMode === 'login' ? 'bg-emerald-500 text-white shadow-md' : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              Sign In
+            </button>
+            <button
+              onClick={() => { setAuthMode('register'); setAuthError(''); }}
+              className={`flex-1 py-2 text-sm font-semibold rounded-lg transition-all ${
+                authMode === 'register' ? 'bg-emerald-500 text-white shadow-md' : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              Register Account
+            </button>
+          </div>
+
+          {authError && (
+            <div className="mb-4 p-3 bg-rose-500/10 border border-rose-500/20 rounded-xl text-rose-400 text-xs font-medium flex items-center gap-2">
+              <AlertTriangle size={16} />
+              <span>{authError}</span>
+            </div>
+          )}
+
+          <form onSubmit={handleAuthSubmit} className="space-y-4">
+            {authMode === 'register' && (
+              <div>
+                <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">Full Name</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="John Doe"
+                  value={authFormData.name}
+                  onChange={(e) => setAuthFormData({ ...authFormData, name: e.target.value })}
+                  className="w-full px-4 py-3 bg-slate-950 border border-slate-800 rounded-xl text-slate-200 focus:outline-none focus:border-emerald-500 transition-colors text-sm"
+                />
+              </div>
+            )}
+
+            <div>
+              <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">Email Address</label>
+              <input
+                type="email"
+                required
+                placeholder="name@company.com"
+                value={authFormData.email}
+                onChange={(e) => setAuthFormData({ ...authFormData, email: e.target.value })}
+                className="w-full px-4 py-3 bg-slate-950 border border-slate-800 rounded-xl text-slate-200 focus:outline-none focus:border-emerald-500 transition-colors text-sm"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">Password</label>
+              <input
+                type="password"
+                required
+                placeholder="••••••••"
+                value={authFormData.password}
+                onChange={(e) => setAuthFormData({ ...authFormData, password: e.target.value })}
+                className="w-full px-4 py-3 bg-slate-950 border border-slate-800 rounded-xl text-slate-200 focus:outline-none focus:border-emerald-500 transition-colors text-sm"
+              />
+            </div>
+
+            <button
+              type="submit"
+              className="w-full py-3 bg-emerald-500 hover:bg-emerald-600 font-semibold text-white rounded-xl shadow-lg shadow-emerald-500/20 transition-all text-sm mt-2"
+            >
+              {authMode === 'login' ? 'Sign In to Dashboard' : 'Create SaaS Account'}
+            </button>
+          </form>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="flex min-h-screen">
       {/* Sidebar Navigation */}
@@ -331,13 +486,40 @@ export default function App() {
           </nav>
         </div>
 
-        {/* System Session Profile status */}
-        <div className="p-4 bg-slate-900/40 border border-slate-800 rounded-xl">
-          <div className="flex items-center gap-2 mb-1.5">
-            <div className={`w-2.5 h-2.5 rounded-full ${automationStatus.status === 'Running' ? 'bg-emerald-500 animate-ping' : 'bg-slate-600'}`}></div>
-            <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">Automation Mode</span>
+        {/* User Account Profile & Session Profile */}
+        <div className="space-y-3">
+          <div className="p-4 bg-slate-900/60 border border-slate-800 rounded-xl space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-full bg-emerald-500/20 border border-emerald-500/40 text-emerald-400 font-bold flex items-center justify-center text-xs">
+                  {user?.name ? user.name.charAt(0).toUpperCase() : 'U'}
+                </div>
+                <div className="truncate max-w-[110px]">
+                  <p className="text-xs font-bold text-slate-200 truncate">{user?.name}</p>
+                  <p className="text-[10px] text-slate-400 truncate">{user?.email}</p>
+                </div>
+              </div>
+              <button
+                onClick={handleLogout}
+                title="Sign Out"
+                className="p-1.5 hover:bg-slate-800 text-slate-400 hover:text-rose-400 rounded-lg transition-colors"
+              >
+                <LogOut size={16} />
+              </button>
+            </div>
+            <div className="flex items-center justify-between text-[11px] pt-2 border-t border-slate-800/60 text-slate-400">
+              <span>Login Seats:</span>
+              <span className="font-bold text-emerald-400">{user?.max_login_sessions || 1} Active Seat</span>
+            </div>
           </div>
-          <p className="text-sm font-medium text-slate-200">{automationStatus.status}</p>
+
+          <div className="p-3 bg-slate-900/40 border border-slate-800 rounded-xl">
+            <div className="flex items-center gap-2 mb-1">
+              <div className={`w-2.5 h-2.5 rounded-full ${automationStatus.status === 'Running' ? 'bg-emerald-500 animate-ping' : 'bg-slate-600'}`}></div>
+              <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">Automation Mode</span>
+            </div>
+            <p className="text-xs font-medium text-slate-200">{automationStatus.status}</p>
+          </div>
         </div>
       </aside>
 
@@ -1781,8 +1963,278 @@ function SettingsView({ settings, onSave }) {
 // VIEW COMPONENT 6: WHATSAPP ACCOUNT / SESSION LOGIN
 // ============================================================================
 function WhatsAppSessionView({ sessionData, isConnecting, onConnect, onRefresh, onLogout }) {
+  const [quota, setQuota] = useState({ max_login_sessions: 1, active_sessions: 0, available_seats: 1 });
+  const [sessions, setSessions] = useState([]);
+  const [isUpgrading, setIsUpgrading] = useState(false);
+  const [upgradeMsg, setUpgradeMsg] = useState('');
+  const [newSessionName, setNewSessionName] = useState('');
+  const [showCreateModal, setShowCreateModal] = useState(false);
+
+  const fetchQuota = async () => {
+    try {
+      const res = await axios.get(`${API_BASE}/user/quota`);
+      setQuota(res.data);
+    } catch (err) {
+      console.error('Failed to fetch quota:', err);
+    }
+  };
+
+  const fetchSessions = async () => {
+    try {
+      const res = await axios.get(`${API_BASE}/automation/sessions`);
+      setSessions(res.data);
+    } catch (err) {
+      console.error('Failed to fetch sessions:', err);
+    }
+  };
+
+  useEffect(() => {
+    fetchQuota();
+    fetchSessions();
+  }, [sessionData]);
+
+  const loadRazorpayScript = () => {
+    return new Promise((resolve) => {
+      if (window.Razorpay) return resolve(true);
+      const script = document.createElement('script');
+      script.src = 'https://checkout.razorpay.com/v1/checkout.js';
+      script.onload = () => resolve(true);
+      script.onerror = () => resolve(false);
+      document.body.appendChild(script);
+    });
+  };
+
+  const handleUpgradeSeats = async () => {
+    setIsUpgrading(true);
+    setUpgradeMsg('');
+    try {
+      const isLoaded = await loadRazorpayScript();
+      const orderRes = await axios.post(`${API_BASE}/billing/razorpay-order`, { additionalSeats: 1 });
+      const order = orderRes.data;
+
+      if (order.mock || !isLoaded || !window.Razorpay) {
+        // Direct mock verification in dev mode
+        const verifyRes = await axios.post(`${API_BASE}/billing/razorpay-verify`, {
+          razorpay_order_id: order.orderId,
+          razorpay_payment_id: `pay_mock_${Date.now()}`,
+          razorpay_signature: 'mock_signature',
+          additionalSeats: 1
+        });
+        setUpgradeMsg(verifyRes.data.message || 'Razorpay Checkout (Test Mode): Added +1 Login Seat!');
+        await fetchQuota();
+        setTimeout(() => setUpgradeMsg(''), 4000);
+        return;
+      }
+
+      const options = {
+        key: order.key,
+        amount: order.amount,
+        currency: order.currency,
+        name: 'WhatsApp Automator SaaS',
+        description: 'Additional WhatsApp Login ID Seat License (₹999/mo)',
+        order_id: order.orderId,
+        prefill: {
+          name: order.user?.name || '',
+          email: order.user?.email || ''
+        },
+        theme: { color: '#10b981' },
+        handler: async (response) => {
+          try {
+            const verifyRes = await axios.post(`${API_BASE}/billing/razorpay-verify`, {
+              razorpay_order_id: response.razorpay_order_id,
+              razorpay_payment_id: response.razorpay_payment_id,
+              razorpay_signature: response.razorpay_signature,
+              additionalSeats: 1
+            });
+            setUpgradeMsg(verifyRes.data.message || 'Razorpay Payment Verified! Seat Added.');
+            await fetchQuota();
+            setTimeout(() => setUpgradeMsg(''), 4000);
+          } catch (err) {
+            alert(`Payment verification failed: ${err.response?.data?.error || err.message}`);
+          }
+        }
+      };
+
+      const rzp = new window.Razorpay(options);
+      rzp.open();
+    } catch (err) {
+      alert(`Razorpay checkout failed: ${err.response?.data?.error || err.message}`);
+    } finally {
+      setIsUpgrading(false);
+    }
+  };
+
+  const handleCreateSession = async (e) => {
+    e.preventDefault();
+    try {
+      await axios.post(`${API_BASE}/automation/sessions/create`, { session_name: newSessionName });
+      setNewSessionName('');
+      setShowCreateModal(false);
+      await fetchQuota();
+      await fetchSessions();
+    } catch (err) {
+      alert(err.response?.data?.error || err.message);
+    }
+  };
+
+  const handleDeleteSession = async (id) => {
+    if (!confirm('Are you sure you want to delete this WhatsApp account profile?')) return;
+    try {
+      await axios.delete(`${API_BASE}/automation/sessions/${id}`);
+      await fetchSessions();
+    } catch (err) {
+      alert(err.response?.data?.error || err.message);
+    }
+  };
+
   return (
     <div className="space-y-6 animate-fade-in">
+      {/* Seat Quota & Licensing Card */}
+      <div className="glass-panel border border-emerald-500/30 rounded-2xl p-6 bg-gradient-to-r from-slate-900 via-slate-900 to-emerald-950/30">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+          <div className="flex items-start gap-4">
+            <div className="p-3.5 rounded-2xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+              <ShieldCheck size={28} />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className="text-lg font-bold text-white font-heading">Subscription & Login Seats</h3>
+                <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+                  {quota.active_sessions} / {quota.max_login_sessions} Seat(s) Occupied
+                </span>
+              </div>
+              <p className="text-sm text-slate-400 mt-1">
+                Per-login seat limit based on your commercial subscription plan. Each seat allows one concurrent active WhatsApp session.
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => setShowCreateModal(true)}
+              className="flex items-center gap-2 px-4 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl font-medium text-sm transition-all border border-slate-700"
+            >
+              <Plus size={16} />
+              Add WhatsApp Profile
+            </button>
+            <button
+              onClick={handleUpgradeSeats}
+              disabled={isUpgrading}
+              className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 text-white rounded-xl font-semibold text-sm transition-all shadow-lg shadow-emerald-500/20"
+            >
+              <Plus size={16} />
+              {isUpgrading ? 'Upgrading...' : 'Buy Additional Seat (+1 Login ID)'}
+            </button>
+          </div>
+        </div>
+
+        {upgradeMsg && (
+          <div className="mt-4 p-3 bg-emerald-500/10 border border-emerald-500/30 rounded-xl text-emerald-400 text-xs font-medium flex items-center gap-2 animate-fade-in">
+            <CheckCircle size={16} />
+            <span>{upgradeMsg}</span>
+          </div>
+        )}
+      </div>
+
+      {/* Add Session Modal */}
+      {showCreateModal && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 w-full max-w-md shadow-2xl">
+            <h3 className="text-lg font-bold text-white mb-2 font-heading">Add WhatsApp Profile</h3>
+            <p className="text-xs text-slate-400 mb-4">
+              Create a new login profile for managing an additional WhatsApp phone number.
+            </p>
+            <form onSubmit={handleCreateSession} className="space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">Profile Name</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. Sales Support WhatsApp"
+                  value={newSessionName}
+                  onChange={(e) => setNewSessionName(e.target.value)}
+                  className="w-full px-4 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-slate-200 focus:outline-none focus:border-emerald-500 text-sm"
+                />
+              </div>
+              <div className="flex items-center justify-end gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowCreateModal(false)}
+                  className="px-4 py-2 text-slate-400 hover:text-slate-200 text-sm font-medium"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl text-sm font-semibold shadow-md"
+                >
+                  Create Profile
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* WhatsApp Profiles Grid */}
+      <div className="space-y-4">
+        <h4 className="text-base font-bold text-white font-heading">Configured WhatsApp Accounts ({sessions.length})</h4>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {sessions.map((s, idx) => (
+            <div key={s.id || idx} className="glass-panel border border-slate-800 rounded-2xl p-5 flex flex-col justify-between gap-4">
+              <div className="flex items-start justify-between">
+                <div className="flex items-center gap-3">
+                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-bold ${
+                    s.connected ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' : 'bg-slate-800 text-slate-400'
+                  }`}>
+                    <Smartphone size={20} />
+                  </div>
+                  <div>
+                    <h5 className="font-bold text-white text-sm">{s.session_name}</h5>
+                    <span className={`text-[11px] font-semibold ${s.connected ? 'text-emerald-400' : 'text-slate-400'}`}>
+                      {s.connected ? '● Connected' : s.status}
+                    </span>
+                  </div>
+                </div>
+                {idx > 0 && (
+                  <button
+                    onClick={() => handleDeleteSession(s.id)}
+                    className="p-1.5 hover:bg-rose-500/20 text-slate-500 hover:text-rose-400 rounded-lg transition-colors"
+                    title="Delete Profile"
+                  >
+                    <Trash2 size={16} />
+                  </button>
+                )}
+              </div>
+
+              <div className="flex items-center justify-between pt-3 border-t border-slate-800/80 text-xs">
+                <span className="text-slate-400">Seat Assignment: Slot #{idx + 1}</span>
+                {idx === 0 && !sessionData.connected && (
+                  <button
+                    onClick={onConnect}
+                    disabled={isConnecting}
+                    className="px-3 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-lg font-semibold text-xs transition-all shadow-sm"
+                  >
+                    {isConnecting ? 'Opening...' : 'Connect WhatsApp'}
+                  </button>
+                )}
+                {idx === 0 && sessionData.connected && (
+                  <button
+                    onClick={onLogout}
+                    className="px-3 py-1.5 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 rounded-lg font-medium text-xs transition-all"
+                  >
+                    Disconnect
+                  </button>
+                )}
+                {idx > 0 && (
+                  <span className="text-slate-500 text-[11px]">Seat ready for pairing</span>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
       {/* Connection Status Card */}
       <div className="glass-panel border border-slate-800 rounded-2xl p-6 relative overflow-hidden">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">

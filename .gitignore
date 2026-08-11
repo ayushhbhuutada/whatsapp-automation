@@ -11,8 +11,10 @@ AppData/
 # 2. Local Databases & Personal Data (CRITICAL: Keeps contacts, logs, and campaigns private)
 database/*.sqlite
 database/*.db
-*.sqlite
-*.db
+*.sqlite*
+*.sqlite-shm
+*.sqlite-wal
+*.db*
 
 # 3. Uploaded Files, Contacts Excel Files, Attachments & Scanned QR Codes
 uploads/*

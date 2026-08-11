@@ -1,0 +1,21 @@
+version: '3.8'
+
+services:
+  whatsapp-saas:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: whatsapp_automation_saas
+    ports:
+      - "5000:5000"
+    environment:
+      - PORT=5000
+      - NODE_ENV=production
+      - JWT_SECRET=whatsapp-saas-production-jwt-secret-key-2026
+      - RAZORPAY_KEY_ID=${RAZORPAY_KEY_ID:-rzp_test_mock_key_id}
+      - RAZORPAY_KEY_SECRET=${RAZORPAY_KEY_SECRET:-rzp_test_mock_key_secret}
+    volumes:
+      - ./database:/app/database
+      - ./uploads:/app/uploads
+      - ./attachments:/app/attachments
+    restart: unless-stopped
