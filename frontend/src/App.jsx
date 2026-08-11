@@ -863,6 +863,7 @@ function AudienceHubView() {
   const [selectedTag, setSelectedTag] = useState('All');
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(false);
+  const [selectedIds, setSelectedIds] = useState([]);
 
   // Modals state
   const [showAddModal, setShowAddModal] = useState(false);
@@ -880,6 +881,7 @@ function AudienceHubView() {
   const [actionSuccess, setActionSuccess] = useState(null);
 
   useEffect(() => {
+    setSelectedIds([]);
     fetchAudienceContacts();
     fetchTags();
   }, [selectedTag, search]);
@@ -904,6 +906,37 @@ function AudienceHubView() {
       setTags(res.data);
     } catch (err) {
       console.error(err);
+    }
+  };
+
+  const handleSelectAll = (e) => {
+    if (e.target.checked) {
+      setSelectedIds(contacts.map(c => c.id));
+    } else {
+      setSelectedIds([]);
+    }
+  };
+
+  const handleToggleSelect = (id) => {
+    setSelectedIds(prev =>
+      prev.includes(id) ? prev.filter(item => item !== id) : [...prev, id]
+    );
+  };
+
+  const handleBulkDelete = async () => {
+    if (selectedIds.length === 0) return;
+    if (!confirm(`Are you sure you want to delete ${selectedIds.length} selected contacts?`)) return;
+
+    setActionError(null);
+    setActionSuccess(null);
+    try {
+      const res = await axios.post(`${API_BASE}/audience/contacts/bulk-delete`, { ids: selectedIds });
+      setActionSuccess(res.data.message);
+      setSelectedIds([]);
+      fetchAudienceContacts();
+      fetchTags();
+    } catch (err) {
+      setActionError(err.response?.data?.error || err.message);
     }
   };
 
@@ -974,6 +1007,7 @@ function AudienceHubView() {
     if (!confirm('Are you sure you want to delete this contact?')) return;
     try {
       await axios.delete(`${API_BASE}/audience/contacts/${id}`);
+      setSelectedIds(prev => prev.filter(itemId => itemId !== id));
       fetchAudienceContacts();
       fetchTags();
     } catch (err) {
@@ -1096,6 +1130,31 @@ function AudienceHubView() {
           <span className="text-xs text-slate-500">Showing {contacts.length} contacts</span>
         </div>
 
+        {/* Bulk Actions Banner */}
+        {selectedIds.length > 0 && (
+          <div className="p-3 bg-rose-500/10 border-b border-rose-500/25 flex items-center justify-between px-6 animate-fade-in">
+            <div className="flex items-center gap-2 text-rose-400 font-semibold text-xs">
+              <Trash2 size={16} />
+              <span>{selectedIds.length} contact(s) selected</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setSelectedIds([])}
+                className="text-xs text-slate-400 hover:text-slate-200 px-3 py-1"
+              >
+                Deselect All
+              </button>
+              <button
+                onClick={handleBulkDelete}
+                className="btn-danger px-4 py-1.5 text-xs font-semibold flex items-center gap-1.5"
+              >
+                <Trash2 size={14} />
+                Delete Selected ({selectedIds.length})
+              </button>
+            </div>
+          </div>
+        )}
+
         {loading ? (
           <div className="p-12 text-center text-slate-500">
             <RefreshCw className="animate-spin mx-auto mb-2" size={24} />
@@ -1112,6 +1171,14 @@ function AudienceHubView() {
             <table className="w-full text-left text-sm text-slate-300">
               <thead className="bg-slate-900/60 text-slate-400 text-xs font-semibold uppercase border-b border-slate-900">
                 <tr>
+                  <th className="px-4 py-3.5 w-10 text-center">
+                    <input
+                      type="checkbox"
+                      checked={contacts.length > 0 && selectedIds.length === contacts.length}
+                      onChange={handleSelectAll}
+                      className="w-4 h-4 rounded text-emerald-500 bg-slate-900 border-slate-700 focus:ring-emerald-500 cursor-pointer"
+                    />
+                  </th>
                   <th className="px-6 py-3.5">Name</th>
                   <th className="px-6 py-3.5">Phone</th>
                   <th className="px-6 py-3.5">Company</th>
@@ -1121,7 +1188,15 @@ function AudienceHubView() {
               </thead>
               <tbody className="divide-y divide-slate-900">
                 {contacts.map((contact) => (
-                  <tr key={contact.id} className="hover:bg-slate-900/40 transition-colors">
+                  <tr key={contact.id} className={`hover:bg-slate-900/40 transition-colors ${selectedIds.includes(contact.id) ? 'bg-slate-900/60' : ''}`}>
+                    <td className="px-4 py-4 text-center">
+                      <input
+                        type="checkbox"
+                        checked={selectedIds.includes(contact.id)}
+                        onChange={() => handleToggleSelect(contact.id)}
+                        className="w-4 h-4 rounded text-emerald-500 bg-slate-900 border-slate-700 focus:ring-emerald-500 cursor-pointer"
+                      />
+                    </td>
                     <td className="px-6 py-4 font-semibold text-slate-100">{contact.name}</td>
                     <td className="px-6 py-4 font-mono text-emerald-400">{contact.phone}</td>
                     <td className="px-6 py-4 text-slate-400">{contact.company || '—'}</td>

@@ -358,6 +358,23 @@ router.delete('/audience/contacts/:id', async (req, res) => {
   }
 });
 
+router.post('/audience/contacts/bulk-delete', async (req, res) => {
+  const { ids } = req.body;
+  if (!Array.isArray(ids) || ids.length === 0) {
+    return res.status(400).json({ error: 'Please select contacts to delete.' });
+  }
+
+  try {
+    const placeholders = ids.map(() => '?').join(',');
+    const params = [...ids, req.user.id];
+    await run(`DELETE FROM saved_contacts WHERE id IN (${placeholders}) AND user_id = ?`, params);
+    res.json({ message: `Successfully deleted ${ids.length} contacts.` });
+  } catch (error) {
+    console.error('Error in bulk delete contacts:', error);
+    res.status(500).json({ error: 'Failed to bulk delete contacts.' });
+  }
+});
+
 router.get('/audience/tags', async (req, res) => {
   try {
     const rows = await all("SELECT DISTINCT tag FROM saved_contacts WHERE user_id = ? AND tag IS NOT NULL AND tag != '' ORDER BY tag ASC", [req.user.id]);
