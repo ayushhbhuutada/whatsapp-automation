@@ -6147,21 +6147,27 @@ function PublicLandingView({
             Run automated outreach directly from your physical desktop. Features 6 active anti-ban circuit breakers, multi-account auto-split dispatch, and deep Spintax variations.
           </p>
 
-          <div className="flex flex-col sm:flex-row items-center justify-center gap-4 pt-4">
-            <a
-              href={downloadUrl}
-              className="w-full sm:w-auto px-8 py-4 bg-emerald-500 hover:bg-emerald-600 font-bold text-white text-sm rounded-xl shadow-xl shadow-emerald-500/25 transition-all flex items-center justify-center gap-2 text-center"
-            >
-              <Download size={18} />
-              <span>Download Windows Installer (.EXE)</span>
-            </a>
-            <a
-              href="#pricing"
-              className="w-full sm:w-auto px-8 py-4 bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-200 text-sm font-bold rounded-xl transition-all flex items-center justify-center gap-2 text-center"
-            >
-              <Zap size={18} className="text-amber-400" />
-              <span>View Pricing & Buy License</span>
-            </a>
+          <div className="flex flex-col items-center justify-center gap-2 pt-4">
+            <div className="flex flex-col sm:flex-row items-center justify-center gap-4 w-full">
+              <a
+                href={downloadUrl}
+                className="w-full sm:w-auto px-8 py-4 bg-emerald-500 hover:bg-emerald-600 font-bold text-white text-sm rounded-xl shadow-xl shadow-emerald-500/25 transition-all flex items-center justify-center gap-2 text-center"
+              >
+                <Download size={18} />
+                <span>Download Windows Installer (.EXE)</span>
+              </a>
+              <a
+                href="#pricing"
+                className="w-full sm:w-auto px-8 py-4 bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-200 text-sm font-bold rounded-xl transition-all flex items-center justify-center gap-2 text-center"
+              >
+                <Zap size={18} className="text-amber-400" />
+                <span>View Pricing & Buy License</span>
+              </a>
+            </div>
+            <p className="text-[11px] text-slate-400 flex items-center gap-1.5 mt-1">
+              <ShieldCheck size={13} className="text-emerald-400" />
+              <span>Verified 64-bit installer • On Windows SmartScreen, click <strong className="text-slate-200">"More info" → "Run anyway"</strong></span>
+            </p>
           </div>
 
           <div className="pt-8 grid grid-cols-2 md:grid-cols-4 gap-4 text-xs font-medium text-slate-400 border-t border-slate-900 max-w-3xl mx-auto">
