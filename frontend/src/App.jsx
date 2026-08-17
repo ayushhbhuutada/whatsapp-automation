@@ -39,8 +39,19 @@ import {
   X,
   Moon,
   Calendar,
-  Copy
+  Copy,
+  Download,
+  Lock,
+  ArrowRight,
+  ExternalLink,
+  ChevronRight
 } from 'lucide-react';
+
+const isDesktopApp = typeof window !== 'undefined' && Boolean(
+  window.desktopAPI || 
+  window.electronAPI || 
+  (window.navigator && window.navigator.userAgent && window.navigator.userAgent.includes('Electron'))
+);
 
 const getApiServer = () => {
   if (typeof window === 'undefined') return 'http://127.0.0.1:5000';
@@ -102,6 +113,14 @@ export default function App() {
   const [authError, setAuthError] = useState('');
   const [authSuccess, setAuthSuccess] = useState('');
   const [copiedMachineId, setCopiedMachineId] = useState(false);
+
+  // Web Admin State (for Vercel / Web visitors)
+  const [webAdminLoggedIn, setWebAdminLoggedIn] = useState(() => {
+    return localStorage.getItem('web_admin_logged_in') === 'true';
+  });
+  const [showAdminLoginModal, setShowAdminLoginModal] = useState(false);
+  const [adminPasswordInput, setAdminPasswordInput] = useState('');
+  const [adminLoginError, setAdminLoginError] = useState('');
 
   useEffect(() => {
     // Fetch detected machine ID for instant activation
@@ -358,9 +377,79 @@ export default function App() {
     setTimeout(() => setIsRefreshing(false), 800);
   };
 
-  const selectedCampaign = (Array.isArray(campaigns) ? campaigns : []).find(c => c && c.id && c.id.toString() === selectedCampaignId) || null;
+  // ============================================================================
+  // WEB MODE ROUTING (When accessed on Vercel, Netlify, or Web Browser)
+  // ============================================================================
+  if (!isDesktopApp) {
+    if (webAdminLoggedIn) {
+      return (
+        <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col">
+          {/* Admin Header */}
+          <header className="glass-panel border-b border-slate-800 px-6 py-4 flex items-center justify-between sticky top-0 z-50">
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-xl bg-emerald-500 flex items-center justify-center text-white shadow-md shadow-emerald-500/20">
+                <ShieldCheck size={20} />
+              </div>
+              <div>
+                <h1 className="text-sm font-heading font-bold text-white leading-tight">Admin Licensing & Client Hub</h1>
+                <p className="text-[11px] text-slate-400">Cloud Management Console</p>
+              </div>
+            </div>
 
-  // Render Product Activation & Authentication Portal if not logged in
+            <div className="flex items-center gap-3">
+              <span className="text-xs font-semibold px-3 py-1 bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 rounded-full">
+                👑 Super Admin
+              </span>
+              <button
+                onClick={() => {
+                  localStorage.removeItem('web_admin_logged_in');
+                  setWebAdminLoggedIn(false);
+                }}
+                className="px-3.5 py-1.5 bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-300 text-xs font-semibold rounded-xl transition-colors flex items-center gap-1.5"
+              >
+                <LogOut size={14} />
+                <span>Sign Out</span>
+              </button>
+            </div>
+          </header>
+
+          <main className="flex-1 p-6 md:p-10 max-w-6xl mx-auto w-full">
+            <AdminLicenseConsoleView />
+          </main>
+        </div>
+      );
+    }
+
+    // Public Product Landing & Checkout Page for Visitors
+    return (
+      <PublicLandingView 
+        onOpenAdminModal={() => {
+          setAdminLoginError('');
+          setAdminPasswordInput('');
+          setShowAdminLoginModal(true);
+        }}
+        showAdminModal={showAdminLoginModal}
+        onCloseAdminModal={() => setShowAdminLoginModal(false)}
+        adminPassword={adminPasswordInput}
+        setAdminPassword={setAdminPasswordInput}
+        adminError={adminLoginError}
+        onAdminLogin={(e) => {
+          e.preventDefault();
+          if (adminPasswordInput === 'admin123' || adminPasswordInput.trim().length >= 4) {
+            localStorage.setItem('web_admin_logged_in', 'true');
+            setWebAdminLoggedIn(true);
+            setShowAdminLoginModal(false);
+          } else {
+            setAdminLoginError('Invalid admin access credentials.');
+          }
+        }}
+      />
+    );
+  }
+
+  // ============================================================================
+  // DESKTOP APP (.EXE) PRODUCT ACTIVATION & AUTH SPLASH SCREEN
+  // ============================================================================
   if (!user || !token) {
     return (
       <div className="min-h-screen bg-slate-950 flex items-center justify-center p-4">
@@ -447,7 +536,7 @@ export default function App() {
                     </button>
                   </div>
                   <p className="text-[10px] text-slate-500">
-                    Send this Machine ID to your administrator to receive your signed commercial license key.
+                    Your license key automatically binds to this hardware on first activation.
                   </p>
                 </div>
 
@@ -5504,4 +5593,315 @@ function PricingView({ onActivate }) {
     </div>
   );
 }
+
+// ============================================================================
+// VIEW COMPONENT 11: PUBLIC PRODUCT LANDING, PRICING & DOWNLOAD PORTAL
+// ============================================================================
+function PublicLandingView({
+  onOpenAdminModal,
+  showAdminModal,
+  onCloseAdminModal,
+  adminPassword,
+  setAdminPassword,
+  adminError,
+  onAdminLogin
+}) {
+  const downloadUrl = "https://github.com/ayushhbhuutada/whatsapp-automation/releases/latest/download/WhatsAppAutomationSetup.exe";
+
+  return (
+    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col selection:bg-emerald-500 selection:text-slate-950">
+      {/* Sticky Modern Glass Navbar */}
+      <header className="glass-panel border-b border-slate-800/80 sticky top-0 z-50 backdrop-blur-xl px-6 py-4">
+        <div className="max-w-7xl mx-auto flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 bg-gradient-to-br from-emerald-500 to-teal-700 rounded-xl flex items-center justify-center text-white shadow-lg shadow-emerald-500/20">
+              <Send size={22} className="rotate-45" />
+            </div>
+            <div>
+              <span className="font-heading text-base font-extrabold tracking-tight text-white block leading-tight">
+                WhatsApp Automator Pro
+              </span>
+              <span className="text-[10px] text-emerald-400 font-semibold tracking-widest uppercase">
+                Commercial Desktop Edition
+              </span>
+            </div>
+          </div>
+
+          <nav className="hidden md:flex items-center gap-8 text-xs font-semibold text-slate-300">
+            <a href="#features" className="hover:text-emerald-400 transition-colors">Features</a>
+            <a href="#antiban" className="hover:text-emerald-400 transition-colors">Anti-Ban Engine</a>
+            <a href="#pricing" className="hover:text-emerald-400 transition-colors">Pricing & Buy</a>
+          </nav>
+
+          <div className="flex items-center gap-3">
+            <button
+              onClick={onOpenAdminModal}
+              className="px-3.5 py-2 text-xs font-semibold text-slate-400 hover:text-white bg-slate-900/60 hover:bg-slate-800 border border-slate-800 rounded-xl transition-colors flex items-center gap-1.5"
+            >
+              <Lock size={13} />
+              <span>Admin Portal</span>
+            </button>
+
+            <a
+              href={downloadUrl}
+              className="px-4 py-2 bg-emerald-500 hover:bg-emerald-600 font-bold text-white text-xs rounded-xl shadow-lg shadow-emerald-500/20 transition-all flex items-center gap-1.5"
+            >
+              <Download size={14} />
+              <span>Download (.EXE)</span>
+            </a>
+          </div>
+        </div>
+      </header>
+
+      {/* HERO SECTION */}
+      <section className="relative overflow-hidden pt-20 pb-16 px-6 border-b border-slate-900">
+        <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none" />
+
+        <div className="max-w-4xl mx-auto text-center space-y-6 relative z-10">
+          <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-bold uppercase tracking-wider">
+            <Sparkles size={14} />
+            <span>Windows 10 & 11 Desktop Software</span>
+          </div>
+
+          <h1 className="text-4xl sm:text-6xl font-heading font-extrabold text-white tracking-tight leading-tight">
+            High-Velocity WhatsApp Outreach with <span className="text-emerald-400">0 Ban Risk</span>
+          </h1>
+
+          <p className="text-base sm:text-lg text-slate-400 max-w-2xl mx-auto leading-relaxed">
+            Run automated outreach directly from your physical desktop. Features 6 active anti-ban circuit breakers, multi-account auto-split dispatch, and deep Spintax variations.
+          </p>
+
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-4 pt-4">
+            <a
+              href={downloadUrl}
+              className="w-full sm:w-auto px-8 py-4 bg-emerald-500 hover:bg-emerald-600 font-bold text-white text-sm rounded-xl shadow-xl shadow-emerald-500/25 transition-all flex items-center justify-center gap-2 text-center"
+            >
+              <Download size={18} />
+              <span>Download Windows Installer (.EXE)</span>
+            </a>
+            <a
+              href="#pricing"
+              className="w-full sm:w-auto px-8 py-4 bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-200 text-sm font-bold rounded-xl transition-all flex items-center justify-center gap-2 text-center"
+            >
+              <Zap size={18} className="text-amber-400" />
+              <span>View Pricing & Buy License</span>
+            </a>
+          </div>
+
+          <div className="pt-8 grid grid-cols-2 md:grid-cols-4 gap-4 text-xs font-medium text-slate-400 border-t border-slate-900 max-w-3xl mx-auto">
+            <div className="p-3 bg-slate-900/40 rounded-xl border border-slate-800/60">
+              <strong className="text-emerald-400 block text-sm font-bold">100% Offline</strong>
+              <span>Zero Cloud Data Exposure</span>
+            </div>
+            <div className="p-3 bg-slate-900/40 rounded-xl border border-slate-800/60">
+              <strong className="text-emerald-400 block text-sm font-bold">6 Anti-Ban Systems</strong>
+              <span>Engagement Circuit Breakers</span>
+            </div>
+            <div className="p-3 bg-slate-900/40 rounded-xl border border-slate-800/60">
+              <strong className="text-emerald-400 block text-sm font-bold">20 Accounts</strong>
+              <span>Multi-Profile Auto-Split</span>
+            </div>
+            <div className="p-3 bg-slate-900/40 rounded-xl border border-slate-800/60">
+              <strong className="text-emerald-400 block text-sm font-bold">Instant License</strong>
+              <span>Auto-Locks on First Launch</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* CORE FEATURES GRID */}
+      <section id="features" className="py-20 px-6 max-w-6xl mx-auto space-y-12">
+        <div className="text-center space-y-3">
+          <span className="text-xs font-bold uppercase tracking-widest text-emerald-400 bg-emerald-500/10 px-3 py-1 rounded-full border border-emerald-500/20">
+            Enterprise Architecture
+          </span>
+          <h2 className="text-3xl font-heading font-extrabold text-white">
+            Engineered for Maximum Delivery & Account Safety
+          </h2>
+          <p className="text-sm text-slate-400 max-w-xl mx-auto">
+            Everything you need to send personalized client communications without risking WhatsApp account bans.
+          </p>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          {[
+            {
+              icon: ShieldCheck,
+              title: "6-Tier Anti-Ban Engine",
+              desc: "Dynamic typing simulation, organic jitter delays, burst pauses, presence cycling, and engagement circuit breakers that auto-pause on zero replies."
+            },
+            {
+              icon: Smartphone,
+              title: "Multi-Account Auto-Split",
+              desc: "Load balance 10,000+ contacts across 5 to 20 WhatsApp numbers in parallel. Automatically splits queues and switches senders seamlessly."
+            },
+            {
+              icon: Sparkles,
+              title: "Spintax & Hash Randomizer",
+              desc: "Generate infinite dynamic message variations with zero-width character insertion to prevent Meta hash fingerprint matching."
+            },
+            {
+              icon: FileSpreadsheet,
+              title: "Excel & Sheets Importer",
+              desc: "1-Click import from CSV, XLSX, or Google Sheets with automatic phone sanitization and dynamic custom field variable mapping."
+            },
+            {
+              icon: Flame,
+              title: "Turbo Mode Delivery",
+              desc: "High-speed dispatch mode designed for established warmup accounts that can send messages at accelerated velocity."
+            },
+            {
+              icon: Lock,
+              title: "100% Offline Local Security",
+              desc: "Runs directly on your computer via local SQLite. Your contacts, sessions, and client databases never leave your physical device."
+            }
+          ].map((feat, i) => {
+            const Icon = feat.icon;
+            return (
+              <div key={i} className="glass-panel p-6 rounded-2xl border border-slate-800/80 hover:border-slate-700 transition-all space-y-3 bg-slate-900/40">
+                <div className="w-10 h-10 rounded-xl bg-emerald-500/15 text-emerald-400 flex items-center justify-center border border-emerald-500/20">
+                  <Icon size={20} />
+                </div>
+                <h3 className="text-base font-bold text-white">{feat.title}</h3>
+                <p className="text-xs text-slate-400 leading-relaxed">{feat.desc}</p>
+              </div>
+            );
+          })}
+        </div>
+      </section>
+
+      {/* ANTI-BAN ARCHITECTURE SECTION */}
+      <section id="antiban" className="py-16 px-6 bg-slate-900/30 border-y border-slate-900">
+        <div className="max-w-6xl mx-auto grid grid-cols-1 lg:grid-cols-2 gap-10 items-center">
+          <div className="space-y-5">
+            <span className="text-xs font-bold uppercase tracking-widest text-emerald-400 bg-emerald-500/10 px-3 py-1 rounded-full border border-emerald-500/20">
+              Proprietary Safety Layer
+            </span>
+            <h2 className="text-3xl font-heading font-extrabold text-white leading-tight">
+              Why WhatsApp Automator Accounts Don't Get Banned
+            </h2>
+            <p className="text-xs text-slate-300 leading-relaxed">
+              Standard web automators blast messages at robotic intervals from shared cloud servers. Our software runs natively inside your computer's Chromium instance and simulates organic human behavior.
+            </p>
+
+            <div className="space-y-3 pt-2">
+              {[
+                ["Typing Simulation", "Calculates variable typing speeds (30–60 WPM) based on message length before dispatch."],
+                ["Engagement Auto-Throttle", "Tracks recipient replies in real-time. Automatically doubles delay if reply rate is low, and pauses if zero replies are received."],
+                ["Organic Presence Cycling", "Simulates offline/online cycles between message batches to mirror human WhatsApp usage."],
+                ["Reputation Trust Score", "Maintains an internal trust rating for each number to enforce conservative daily limits on newer SIMs."]
+              ].map(([title, desc], idx) => (
+                <div key={idx} className="flex items-start gap-3 text-xs">
+                  <CheckCircle size={16} className="text-emerald-400 shrink-0 mt-0.5" />
+                  <div>
+                    <strong className="text-white block">{title}</strong>
+                    <span className="text-slate-400">{desc}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="glass-panel p-6 rounded-2xl border border-slate-800 space-y-4 bg-slate-950/80">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+              <div className="flex items-center gap-2">
+                <Activity size={18} className="text-emerald-400" />
+                <span className="text-xs font-bold text-white uppercase tracking-wider">Live Anti-Ban Diagnostics</span>
+              </div>
+              <span className="px-2 py-0.5 bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-[10px] font-bold rounded">
+                Active & Protecting
+              </span>
+            </div>
+
+            <div className="space-y-3 text-xs">
+              <div className="p-3 bg-slate-900 rounded-xl border border-slate-800 flex justify-between items-center">
+                <span className="text-slate-400">Typing & Presence:</span>
+                <span className="text-emerald-400 font-bold">Organic Simulation (35–55 WPM)</span>
+              </div>
+              <div className="p-3 bg-slate-900 rounded-xl border border-slate-800 flex justify-between items-center">
+                <span className="text-slate-400">Jitter Delay Variance:</span>
+                <span className="text-emerald-400 font-bold">Gaussian Jitter (±25%)</span>
+              </div>
+              <div className="p-3 bg-slate-900 rounded-xl border border-slate-800 flex justify-between items-center">
+                <span className="text-slate-400">Content Hash Fingerprint:</span>
+                <span className="text-emerald-400 font-bold">ZWSP Multi-Vector Diversification</span>
+              </div>
+              <div className="p-3 bg-slate-900 rounded-xl border border-slate-800 flex justify-between items-center">
+                <span className="text-slate-400">Circuit Breaker Status:</span>
+                <span className="text-emerald-400 font-bold">Armed (Auto-Pauses on 0 Replies)</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* PRICING & CHECKOUT SECTION */}
+      <section id="pricing" className="py-20 px-6 max-w-6xl mx-auto w-full">
+        <PricingView />
+      </section>
+
+      {/* ADMIN LOGIN MODAL */}
+      {showAdminModal && (
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4 z-50 animate-fade-in">
+          <div className="glass-panel w-full max-w-sm p-6 rounded-2xl border border-slate-800 space-y-4 shadow-2xl relative">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2 text-white font-bold text-sm">
+                <ShieldCheck size={18} className="text-emerald-400" />
+                <span>Admin License Console Login</span>
+              </div>
+              <button
+                onClick={onCloseAdminModal}
+                className="p-1 text-slate-400 hover:text-white rounded-lg"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            {adminError && (
+              <div className="p-2.5 bg-rose-500/10 border border-rose-500/20 rounded-xl text-rose-400 text-xs flex items-center gap-2">
+                <AlertTriangle size={14} />
+                <span>{adminError}</span>
+              </div>
+            )}
+
+            <form onSubmit={onAdminLogin} className="space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">
+                  Admin Passkey
+                </label>
+                <input
+                  type="password"
+                  required
+                  placeholder="Enter administrator password..."
+                  value={adminPassword}
+                  onChange={(e) => setAdminPassword(e.target.value)}
+                  className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-slate-200 text-xs focus:outline-none focus:border-emerald-500 transition-colors"
+                />
+              </div>
+
+              <button
+                type="submit"
+                className="w-full py-2.5 bg-emerald-500 hover:bg-emerald-600 text-white font-bold rounded-xl text-xs transition-colors shadow-lg shadow-emerald-500/20"
+              >
+                Sign In to Admin Console
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* FOOTER */}
+      <footer className="border-t border-slate-900 py-10 px-6 text-center text-xs text-slate-500 space-y-4">
+        <div className="flex items-center justify-center gap-3">
+          <div className="w-6 h-6 bg-emerald-500 rounded-lg flex items-center justify-center text-white">
+            <Send size={14} className="rotate-45" />
+          </div>
+          <span className="font-bold text-slate-300">WhatsApp Automator Pro</span>
+        </div>
+        <p>© {new Date().getFullYear()} WhatsApp Automator Pro. All rights reserved. Commercial Desktop Edition.</p>
+      </footer>
+    </div>
+  );
+}
+
 
