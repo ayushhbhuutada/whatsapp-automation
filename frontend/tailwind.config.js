@@ -21,7 +21,12 @@ export default {
         }
       },
       fontFamily: {
-        sans: ['Inter', 'Outfit', 'sans-serif'],
+        sans: ['Plus Jakarta Sans', 'Outfit', 'Inter', 'system-ui', 'sans-serif'],
+        display: ['Space Grotesk', 'Outfit', 'system-ui', 'sans-serif'],
+        heading: ['Outfit', 'Plus Jakarta Sans', 'system-ui', 'sans-serif'],
+        jakarta: ['Plus Jakarta Sans', 'system-ui', 'sans-serif'],
+        space: ['Space Grotesk', 'system-ui', 'sans-serif'],
+        mono: ['JetBrains Mono', 'monospace'],
       },
       animation: {
         'pulse-slow': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',

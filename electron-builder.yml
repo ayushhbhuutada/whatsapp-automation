@@ -1,0 +1,29 @@
+appId: com.whatsapp.automation.pro
+productName: WhatsApp Automation
+electronVersion: 30.0.0
+artifactName: WhatsAppAutomationSetup.${ext}
+directories:
+  output: dist_electron
+  buildResources: electron
+files:
+  - electron/**/*
+  - backend/**/*
+  - frontend/dist/**/*
+  - database/**/*
+  - package.json
+asar: true
+asarUnpack:
+  - "**/*.node"
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+  executableName: WhatsAppAutomation
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: WhatsApp Automation
+  runAfterFinish: true

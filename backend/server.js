@@ -8,8 +8,17 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import apiRouter from './routes.js';
 import runner from './services/automationRunner.js';
+import { getUploadsDir, getAttachmentsDir } from './paths.js';
 
 dotenv.config();
+
+process.on('unhandledRejection', (reason) => {
+  console.error('[Process Warning] Unhandled Rejection:', reason?.message || reason);
+});
+
+process.on('uncaughtException', (err) => {
+  console.error('[Process Warning] Uncaught Exception:', err?.message || err);
+});
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -30,10 +39,10 @@ const authLimiter = rateLimit({
   message: { error: 'Too many login or registration attempts. Please try again in 15 minutes.' }
 });
 
-// General API rate limiter (max 300 requests per 15 minutes per IP)
+// General API rate limiter (max 5000 requests per 15 minutes per IP to allow real-time UI polling)
 const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 300,
+  max: 5000,
   message: { error: 'Rate limit exceeded. Please try again later.' }
 });
 
@@ -55,11 +64,16 @@ app.use('/api', apiLimiter);
 // Register API Routes
 app.use('/api', apiRouter);
 
+// JSON 404 handler for unmatched /api/* routes
+app.all('/api/*', (req, res) => {
+  res.status(404).json({ error: 'Endpoint not found' });
+});
+
 // Serve uploads as static resources (useful for previewing attachment files)
-const uploadsDir = path.resolve(__dirname, '../uploads');
+const uploadsDir = getUploadsDir();
 app.use('/uploads', express.static(uploadsDir));
 
-const attachmentsDir = path.resolve(__dirname, '../attachments');
+const attachmentsDir = getAttachmentsDir();
 app.use('/attachments', express.static(attachmentsDir));
 
 // Serve frontend production build statically in production mode

@@ -1,0 +1,69 @@
+{
+  "name": "whatsapp-automation-suite",
+  "version": "1.0.0",
+  "description": "WhatsApp Automation & Anti-Ban Commercial Desktop Edition",
+  "author": "WhatsApp Automation Pro Team",
+  "private": true,
+  "main": "electron/main.cjs",
+  "type": "module",
+  "scripts": {
+    "dev": "concurrently \"npm run dev --prefix backend\" \"npm run dev --prefix frontend\"",
+    "start": "node backend/server.js",
+    "start:electron": "electron .",
+    "build:frontend": "npm --prefix frontend run build",
+    "build:electron": "npm --prefix frontend run build && electron-builder --win nsis",
+    "build:installer": "npm --prefix frontend run build && electron-builder --win nsis",
+    "build:exe": "npm --prefix frontend run build && electron-builder --win nsis",
+    "dist": "npm --prefix frontend run build && electron-builder --win nsis"
+  },
+  "dependencies": {
+    "puppeteer": "^22.15.0",
+    "puppeteer-core": "^22.15.0",
+    "qrcode": "^1.5.4",
+    "whatsapp-web.js": "^1.26.0"
+  },
+  "devDependencies": {
+    "electron": "30.0.0",
+    "electron-builder": "24.13.3"
+  },
+  "build": {
+    "appId": "com.whatsapp.automation.pro",
+    "productName": "WhatsApp Automation",
+    "electronVersion": "30.0.0",
+    "artifactName": "WhatsAppAutomationSetup.${ext}",
+    "directories": {
+      "output": "dist_electron",
+      "buildResources": "electron"
+    },
+    "files": [
+      "backend/**/*",
+      "frontend/dist/**/*",
+      "database/**/*",
+      "electron/**/*",
+      "package.json"
+    ],
+    "asar": true,
+    "asarUnpack": [
+      "**/*.node"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "executableName": "WhatsAppAutomation"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "WhatsApp Automation",
+      "runAfterFinish": true
+    }
+  }
+}

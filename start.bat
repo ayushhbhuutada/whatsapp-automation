@@ -9,10 +9,7 @@ echo.
 
 :: 0. Auto-Check & Sync Latest Updates from GitHub
 if exist "%~dp0.git" (
-    echo [1/3] Syncing latest code updates from GitHub...
-    git fetch origin main >nul 2>&1
-    git reset --hard origin/main >nul 2>&1
-    echo       Repository synced to latest commit.
+    echo [1/3] Using local workspace code.
 ) else (
     echo [1/3] Running from extracted ZIP folder.
 )

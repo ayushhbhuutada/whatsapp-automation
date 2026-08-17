@@ -256,3 +256,46 @@ export function parseRawTextContacts(text) {
   return contacts;
 }
 
+/**
+ * Sanitizes and deduplicates a list of contacts.
+ * Cleans phone numbers, applies default country code if 10 digits, and removes duplicate numbers.
+ * @param {Array<Object>} contacts 
+ * @param {string} defaultCountryCode 
+ * @returns {Array<Object>}
+ */
+export function sanitizeContactsList(contacts = [], defaultCountryCode = '91') {
+  if (!Array.isArray(contacts)) return [];
+  const cleanCc = String(defaultCountryCode || '91').replace(/\D/g, '');
+
+  const seenPhones = new Set();
+  const sanitized = [];
+
+  for (const c of contacts) {
+    if (!c || !c.phone) continue;
+
+    let phone = String(c.phone).trim();
+    const hasPlus = phone.startsWith('+');
+    let cleanDigits = phone.replace(/\D/g, '');
+
+    if (!cleanDigits || cleanDigits.length < 5) continue;
+
+    // Apply default country code if 10 digits long and no country code was included
+    if (cleanDigits.length === 10 && cleanCc) {
+      cleanDigits = cleanCc + cleanDigits;
+    }
+
+    const finalPhone = hasPlus ? '+' + cleanDigits : cleanDigits;
+
+    if (seenPhones.has(cleanDigits)) continue;
+    seenPhones.add(cleanDigits);
+
+    sanitized.push({
+      ...c,
+      phone: finalPhone
+    });
+  }
+
+  return sanitized;
+}
+
+

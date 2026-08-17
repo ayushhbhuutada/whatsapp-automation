@@ -67,7 +67,10 @@ export async function fetchGoogleSheet(url) {
       
       // Get the sheet metadata to find the sheet name
       const meta = await sheets.spreadsheets.get({ spreadsheetId });
-      const targetSheet = meta.data.sheets.find(s => String(s.properties.sheetId) === String(gid)) || meta.data.sheets[0];
+      const targetSheet = (meta.data?.sheets || []).find(s => String(s.properties?.sheetId) === String(gid)) || (meta.data?.sheets && meta.data.sheets[0]);
+      if (!targetSheet || !targetSheet.properties) {
+        throw new Error('No valid sheet found in the Google Spreadsheet.');
+      }
       const sheetName = targetSheet.properties.title;
 
       const response = await sheets.spreadsheets.values.get({
@@ -182,7 +185,8 @@ export async function updateGoogleSheetStatus(url, rowIndex, status, errorReason
     
     // Get sheets metadata to map gid to title
     const meta = await sheets.spreadsheets.get({ spreadsheetId });
-    const targetSheet = meta.data.sheets.find(s => String(s.properties.sheetId) === String(gid)) || meta.data.sheets[0];
+    const targetSheet = (meta.data?.sheets || []).find(s => String(s.properties?.sheetId) === String(gid)) || (meta.data?.sheets && meta.data.sheets[0]);
+    if (!targetSheet || !targetSheet.properties) return false;
     const sheetName = targetSheet.properties.title;
 
     // Get header row to locate the "Status" column

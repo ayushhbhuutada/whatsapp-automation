@@ -20,7 +20,11 @@
     "jsonwebtoken": "^9.0.3",
     "multer": "^1.4.5-lts.1",
     "playwright": "^1.44.0",
+    "puppeteer": "^24.1.0",
+    "puppeteer-core": "^24.1.0",
+    "qrcode": "^1.5.4",
     "razorpay": "^2.9.8",
+    "whatsapp-web.js": "^1.26.0",
     "xlsx": "^0.18.5"
   },
   "devDependencies": {

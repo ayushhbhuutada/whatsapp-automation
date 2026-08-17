@@ -1,11 +1,28 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&family=Outfit:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Space+Grotesk:wght@400;500;600;700&display=swap');
 
 @import "tailwindcss";
+
+:root {
+  --color-glass-1: rgba(15, 23, 42, 0.45);
+  --color-glass-2: rgba(30, 41, 59, 0.4);
+  --color-border-glow: rgba(37, 211, 102, 0.35);
+}
 
 @layer base {
   body {
     @apply bg-slate-950 text-slate-100 font-sans antialiased overflow-x-hidden;
   }
+}
+
+/* Sidebar navigation styling & glow effects */
+.sidebar-link {
+  border: 1px solid transparent;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.sidebar-link.active {
+  border-color: rgba(37, 211, 102, 0.5);
+  box-shadow: 0 0 15px rgba(37, 211, 102, 0.35), inset 0 0 10px rgba(37, 211, 102, 0.1);
 }
 
 /* Premium custom styling utilities */
@@ -21,6 +38,14 @@
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
   border: 1px solid rgba(255, 255, 255, 0.05);
+  will-change: transform;
+  transform: translateZ(0);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.glass-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
 }
 
 .glass-input {
