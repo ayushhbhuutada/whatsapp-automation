@@ -44,7 +44,8 @@ import {
   Lock,
   ArrowRight,
   ExternalLink,
-  ChevronRight
+  ChevronRight,
+  RotateCcw
 } from 'lucide-react';
 
 const isDesktopApp = typeof window !== 'undefined' && Boolean(
