@@ -4686,17 +4686,87 @@ function AdminLicenseConsoleView() {
   const [historySearch, setHistorySearch] = useState('');
   const [loadingHistory, setLoadingHistory] = useState(false);
 
+// Default Store & Plans Configuration Template
+const DEFAULT_STORE_CONFIG_FRONTEND = {
+  brandName: 'WhatsApp Automator Pro',
+  brandTagline: 'Commercial Desktop Automation Suite',
+  supportEmail: 'support@rudraexpression.in',
+  supportWhatsapp: '+919876543210',
+  downloadUrl: 'https://github.com/ayushhbhuutada/whatsapp-automation/releases/latest/download/WhatsAppAutomationSetup.exe',
+  razorpayKeyId: '',
+  razorpayKeySecret: '',
+  plans: [
+    {
+      id: 'starter',
+      name: 'Starter Monthly',
+      price: '₹999',
+      priceInPaise: 99900,
+      period: '/ month',
+      badge: 'Starter',
+      desc: 'Ideal for small businesses starting out with single-account outreach.',
+      validityDays: 30,
+      sessionsLimit: 1,
+      turboAllowed: false,
+      multiSessionAllowed: false,
+      popular: false,
+      features: [
+        '1 WhatsApp Profile',
+        'Spintax Content Randomizer',
+        'Anti-Ban Daily Warmup Engine',
+        'Excel & Google Sheets Import',
+        'Offline Local Database',
+        'Standard Dispatch Speeds'
+      ]
+    },
+    {
+      id: 'pro',
+      name: 'Pro Growth',
+      price: '₹4,999',
+      priceInPaise: 499900,
+      period: '/ year',
+      badge: '⭐ Most Popular',
+      desc: 'High-speed multi-device automation for power users and growing teams.',
+      validityDays: 365,
+      sessionsLimit: 5,
+      turboAllowed: true,
+      multiSessionAllowed: true,
+      popular: true,
+      features: [
+        '5 WhatsApp Profiles in Parallel',
+        'Multi-Device Auto-Split Load Balancing',
+        '6 Advanced Anti-Ban Systems',
+        'Engagement Circuit Breaker',
+        'Turbo Mode Bypass Control',
+        '1 Year Full Updates & Support'
+      ]
+    },
+    {
+      id: 'agency',
+      name: 'Agency VIP',
+      price: '₹14,999',
+      priceInPaise: 1499900,
+      period: 'Lifetime Access',
+      badge: '👑 Lifetime VIP',
+      desc: 'Enterprise capabilities for agencies handling high-volume client broadcasting.',
+      validityDays: 3650,
+      sessionsLimit: 20,
+      turboAllowed: true,
+      multiSessionAllowed: true,
+      popular: false,
+      features: [
+        '20 WhatsApp Profiles Concurrently',
+        'Multi-Device Auto-Split Load Balancing',
+        'All 6 Anti-Ban Systems & Fingerprinting',
+        'Unlimited Campaigns & Contacts',
+        'Lifetime Offline Commercial License',
+        'Team Seats & Multi-User Access'
+      ]
+    }
+  ]
+};
+
   // Store & Pricing Configuration State
-  const [storeConfig, setStoreConfig] = useState({
-    brandName: 'WhatsApp Automator Pro',
-    brandTagline: 'Commercial Desktop Automation Suite',
-    supportEmail: 'support@rudraexpression.in',
-    supportWhatsapp: '+919876543210',
-    downloadUrl: 'https://github.com/ayushhbhuutada/whatsapp-automation/releases/latest/download/WhatsAppAutomationSetup.exe',
-    razorpayKeyId: '',
-    razorpayKeySecret: '',
-    plans: []
-  });
+  const [storeConfig, setStoreConfig] = useState(DEFAULT_STORE_CONFIG_FRONTEND);
   const [loadingConfig, setLoadingConfig] = useState(false);
   const [configSuccessMsg, setConfigSuccessMsg] = useState('');
   const [configErrorMsg, setConfigErrorMsg] = useState('');
@@ -4706,12 +4776,57 @@ function AdminLicenseConsoleView() {
       setLoadingConfig(true);
       const res = await axios.get(`${API_BASE}/admin/config`);
       if (res.data?.config) {
-        setStoreConfig(res.data.config);
+        setStoreConfig({
+          ...DEFAULT_STORE_CONFIG_FRONTEND,
+          ...res.data.config,
+          plans: Array.isArray(res.data.config.plans) && res.data.config.plans.length > 0 
+            ? res.data.config.plans 
+            : DEFAULT_STORE_CONFIG_FRONTEND.plans
+        });
       }
     } catch (e) {
       console.warn('Failed to load admin config:', e.message);
     } finally {
       setLoadingConfig(false);
+    }
+  };
+
+  const handleAddNewPlan = () => {
+    const newId = `custom_tier_${Date.now().toString().slice(-4)}`;
+    const newPlan = {
+      id: newId,
+      name: 'New Custom Tier',
+      price: '₹2,999',
+      priceInPaise: 299900,
+      period: '/ year',
+      badge: 'Custom',
+      desc: 'Custom outreach automation package.',
+      validityDays: 365,
+      sessionsLimit: 3,
+      turboAllowed: false,
+      multiSessionAllowed: true,
+      popular: false,
+      features: [
+        '3 WhatsApp Profiles',
+        'Spintax Randomizer',
+        'Anti-Ban Warmup Engine'
+      ]
+    };
+    setStoreConfig(prev => ({ ...prev, plans: [...(prev.plans || []), newPlan] }));
+  };
+
+  const handleRemovePlan = (index) => {
+    if ((storeConfig.plans || []).length <= 1) {
+      alert('You must keep at least 1 pricing plan.');
+      return;
+    }
+    const updated = storeConfig.plans.filter((_, i) => i !== index);
+    setStoreConfig(prev => ({ ...prev, plans: updated }));
+  };
+
+  const handleResetDefaultPlans = () => {
+    if (confirm('Reset all pricing plans back to the default Starter, Pro, and Agency VIP tiers?')) {
+      setStoreConfig(prev => ({ ...prev, plans: DEFAULT_STORE_CONFIG_FRONTEND.plans }));
     }
   };
 
@@ -5420,19 +5535,54 @@ function AdminLicenseConsoleView() {
 
             {/* Section 3: Live Pricing & Tier Editor */}
             <div className="space-y-4 pt-4 border-t border-slate-800">
-              <h4 className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-2">
-                <Zap size={14} className="text-emerald-400" />
-                <span>3. Commercial Pricing Plans & Feature Limits</span>
-              </h4>
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <div>
+                  <h4 className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-2">
+                    <Zap size={14} className="text-emerald-400" />
+                    <span>3. Commercial Pricing Plans & Feature Limits</span>
+                  </h4>
+                  <p className="text-[11px] text-slate-500">Edit prices, validity, quotas, or add/delete plans.</p>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={handleAddNewPlan}
+                    className="px-3 py-1.5 bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/30 text-emerald-400 font-bold rounded-xl text-xs flex items-center gap-1.5 transition-colors"
+                  >
+                    <Plus size={13} />
+                    <span>Add New Plan</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleResetDefaultPlans}
+                    className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-400 hover:text-slate-200 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-colors"
+                  >
+                    <RotateCcw size={12} />
+                    <span>Reset Defaults</span>
+                  </button>
+                </div>
+              </div>
 
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 {(storeConfig.plans || []).map((plan, idx) => (
-                  <div key={plan.id || idx} className="p-5 bg-slate-950 border border-slate-800 rounded-2xl space-y-4">
+                  <div key={plan.id || idx} className="p-5 bg-slate-950 border border-slate-800 rounded-2xl space-y-4 relative">
                     <div className="flex justify-between items-center pb-2 border-b border-slate-800">
-                      <span className="font-bold text-white text-sm">{plan.name}</span>
-                      <span className="text-[10px] font-mono uppercase bg-emerald-500/10 text-emerald-400 px-2 py-0.5 rounded border border-emerald-500/20">
-                        {plan.id}
-                      </span>
+                      <div className="flex items-center gap-2">
+                        <span className="font-bold text-white text-sm">{plan.name || 'Tier'}</span>
+                        <span className="text-[10px] font-mono uppercase bg-emerald-500/10 text-emerald-400 px-2 py-0.5 rounded border border-emerald-500/20">
+                          {plan.id}
+                        </span>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => handleRemovePlan(idx)}
+                        title="Delete this pricing plan"
+                        className="p-1 text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 rounded-lg transition-colors"
+                      >
+                        <Trash2 size={14} />
+                      </button>
                     </div>
 
                     <div className="space-y-3 text-xs">
