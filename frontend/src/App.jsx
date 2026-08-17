@@ -85,7 +85,7 @@ export default function App() {
     }
   };
 
-  // Authentication State
+  // Authentication & License State
   const defaultAdmin = { id: 1, name: 'Admin', email: 'admin@local.host', max_login_sessions: 1 };
   const [user, setUser] = useState(() => {
     try {
@@ -96,9 +96,21 @@ export default function App() {
     }
   });
   const [token, setToken] = useState(() => localStorage.getItem('token') || 'dev-bypass-token');
-  const [authMode, setAuthMode] = useState('login');
-  const [authFormData, setAuthFormData] = useState({ name: '', email: '', password: '' });
+  const [authMode, setAuthMode] = useState('license');
+  const [authFormData, setAuthFormData] = useState({ name: '', email: '', password: '', licenseKey: '' });
+  const [detectedMachineId, setDetectedMachineId] = useState('');
   const [authError, setAuthError] = useState('');
+  const [authSuccess, setAuthSuccess] = useState('');
+  const [copiedMachineId, setCopiedMachineId] = useState(false);
+
+  useEffect(() => {
+    // Fetch detected machine ID for instant activation
+    axios.get(`${API_BASE}/license/machine-id`)
+      .then(res => {
+        if (res.data?.machineId) setDetectedMachineId(res.data.machineId);
+      })
+      .catch(() => {});
+  }, []);
 
   // Set axios auth header
   useEffect(() => {
@@ -109,6 +121,43 @@ export default function App() {
   const handleAuthSubmit = async (e) => {
     e.preventDefault();
     setAuthError('');
+    setAuthSuccess('');
+    
+    if (authMode === 'license') {
+      const key = (authFormData.licenseKey || '').trim();
+      if (!key) {
+        setAuthError('Please paste your commercial license key to activate.');
+        return;
+      }
+      try {
+        const res = await axios.post(`${API_BASE}/license/activate`, { licenseKey: key });
+        if (res.data.success && res.data.activated) {
+          const lic = res.data.license || {};
+          const clientUser = {
+            id: 1,
+            name: lic.customer || 'Licensed Client',
+            email: lic.customer ? `${String(lic.customer).toLowerCase().replace(/\s+/g, '')}@desktop.pro` : 'client@pro.desktop',
+            role: 'Owner',
+            max_login_sessions: lic.maxSessions || 5
+          };
+          setUser(clientUser);
+          setToken('licensed-active-session');
+          localStorage.setItem('user', JSON.stringify(clientUser));
+          localStorage.setItem('token', 'licensed-active-session');
+          setAuthSuccess('✓ License activated successfully! Launching dashboard...');
+          setTimeout(() => {
+            fetchSettings();
+            fetchCampaigns();
+          }, 400);
+        } else {
+          setAuthError(res.data.error || 'License key validation failed.');
+        }
+      } catch (err) {
+        setAuthError(err.response?.data?.error || 'Failed to activate license. Please verify your key.');
+      }
+      return;
+    }
+
     try {
       const endpoint = authMode === 'login' ? `${API_BASE}/auth/login` : `${API_BASE}/auth/register`;
       const res = await axios.post(endpoint, authFormData);
@@ -119,6 +168,13 @@ export default function App() {
     } catch (err) {
       setAuthError(err.response?.data?.error || 'Authentication failed. Please check your credentials.');
     }
+  };
+
+  const handleCopyMachineId = () => {
+    if (!detectedMachineId) return;
+    navigator.clipboard.writeText(detectedMachineId);
+    setCopiedMachineId(true);
+    setTimeout(() => setCopiedMachineId(false), 2000);
   };
 
   const handleLogout = () => {
@@ -304,12 +360,12 @@ export default function App() {
 
   const selectedCampaign = (Array.isArray(campaigns) ? campaigns : []).find(c => c && c.id && c.id.toString() === selectedCampaignId) || null;
 
-  // Render Authentication Portal if not logged in
+  // Render Product Activation & Authentication Portal if not logged in
   if (!user || !token) {
     return (
       <div className="min-h-screen bg-slate-950 flex items-center justify-center p-4">
-        <div className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-2xl p-8 shadow-2xl">
-          <div className="flex items-center justify-center gap-3 mb-6">
+        <div className="w-full max-w-lg bg-slate-900 border border-slate-800 rounded-2xl p-8 shadow-2xl space-y-6">
+          <div className="flex items-center justify-center gap-3">
             <div className="w-12 h-12 bg-emerald-500 rounded-2xl flex items-center justify-center text-white shadow-lg shadow-emerald-500/20">
               <Send size={26} className="rotate-45" />
             </div>
@@ -319,33 +375,106 @@ export default function App() {
             </div>
           </div>
 
-          <div className="flex bg-slate-950 p-1 rounded-xl mb-6 border border-slate-800">
+          {/* Mode Switcher */}
+          <div className="flex bg-slate-950 p-1 rounded-xl border border-slate-800 text-xs font-semibold">
             <button
-              onClick={() => { setAuthMode('login'); setAuthError(''); }}
-              className={`flex-1 py-2 text-sm font-semibold rounded-lg transition-all ${
+              onClick={() => { setAuthMode('license'); setAuthError(''); setAuthSuccess(''); }}
+              className={`flex-1 py-2.5 rounded-lg transition-all flex items-center justify-center gap-1.5 ${
+                authMode === 'license' ? 'bg-emerald-500 text-white shadow-md' : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              <ShieldCheck size={14} />
+              <span>Activate License</span>
+            </button>
+            <button
+              onClick={() => { setAuthMode('login'); setAuthError(''); setAuthSuccess(''); }}
+              className={`flex-1 py-2.5 rounded-lg transition-all ${
                 authMode === 'login' ? 'bg-emerald-500 text-white shadow-md' : 'text-slate-400 hover:text-white'
               }`}
             >
-              Sign In
+              Admin Login
             </button>
             <button
-              onClick={() => { setAuthMode('register'); setAuthError(''); }}
-              className={`flex-1 py-2 text-sm font-semibold rounded-lg transition-all ${
+              onClick={() => { setAuthMode('register'); setAuthError(''); setAuthSuccess(''); }}
+              className={`flex-1 py-2.5 rounded-lg transition-all ${
                 authMode === 'register' ? 'bg-emerald-500 text-white shadow-md' : 'text-slate-400 hover:text-white'
               }`}
             >
-              Register Account
+              Create Account
             </button>
           </div>
 
           {authError && (
-            <div className="mb-4 p-3 bg-rose-500/10 border border-rose-500/20 rounded-xl text-rose-400 text-xs font-medium flex items-center gap-2">
-              <AlertTriangle size={16} />
+            <div className="p-3 bg-rose-500/10 border border-rose-500/20 rounded-xl text-rose-400 text-xs font-medium flex items-center gap-2">
+              <AlertTriangle size={16} className="shrink-0" />
               <span>{authError}</span>
             </div>
           )}
 
+          {authSuccess && (
+            <div className="p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-xl text-emerald-400 text-xs font-medium flex items-center gap-2">
+              <CheckCircle size={16} className="shrink-0" />
+              <span>{authSuccess}</span>
+            </div>
+          )}
+
           <form onSubmit={handleAuthSubmit} className="space-y-4">
+            {authMode === 'license' && (
+              <div className="space-y-4">
+                {/* Hardware Machine ID Detection Card */}
+                <div className="p-3.5 bg-slate-950/80 border border-slate-800 rounded-xl space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+                      <Smartphone size={13} className="text-emerald-400" />
+                      Your Hardware Machine ID
+                    </span>
+                    <span className="text-[10px] text-emerald-400 font-mono bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">Auto-Detected</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      readOnly
+                      value={detectedMachineId || 'Detecting hardware...'}
+                      className="flex-1 px-3 py-2 bg-slate-900 border border-slate-800 rounded-lg text-emerald-300 font-mono text-xs select-all focus:outline-none"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleCopyMachineId}
+                      className="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg text-xs font-bold transition-colors flex items-center gap-1 shrink-0"
+                    >
+                      {copiedMachineId ? <Check size={14} className="text-emerald-400" /> : <Copy size={14} />}
+                      <span>{copiedMachineId ? 'Copied!' : 'Copy ID'}</span>
+                    </button>
+                  </div>
+                  <p className="text-[10px] text-slate-500">
+                    Send this Machine ID to your administrator to receive your signed commercial license key.
+                  </p>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">
+                    Paste Commercial License Key (WALIC...)
+                  </label>
+                  <textarea
+                    rows={3}
+                    required
+                    placeholder="WALIC.eyJjdXN0b21lciI6IkNsaWVudCIsIm5vZGVMb2NrSWQiOiJXQS1XSU4t..."
+                    value={authFormData.licenseKey}
+                    onChange={(e) => setAuthFormData({ ...authFormData, licenseKey: e.target.value })}
+                    className="w-full px-4 py-3 bg-slate-950 border border-slate-800 rounded-xl text-slate-200 focus:outline-none focus:border-emerald-500 transition-colors font-mono text-xs"
+                  />
+                </div>
+
+                <button
+                  type="submit"
+                  className="w-full py-3.5 bg-emerald-500 hover:bg-emerald-600 font-bold text-white rounded-xl shadow-lg shadow-emerald-500/20 transition-all text-sm flex items-center justify-center gap-2"
+                >
+                  <ShieldCheck size={18} />
+                  <span>Activate Commercial License</span>
+                </button>
+              </div>
+            )}
+
             {authMode === 'register' && (
               <div>
                 <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">Full Name</label>
@@ -360,36 +489,40 @@ export default function App() {
               </div>
             )}
 
-            <div>
-              <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">Email Address</label>
-              <input
-                type="email"
-                required
-                placeholder="name@company.com"
-                value={authFormData.email}
-                onChange={(e) => setAuthFormData({ ...authFormData, email: e.target.value })}
-                className="w-full px-4 py-3 bg-slate-950 border border-slate-800 rounded-xl text-slate-200 focus:outline-none focus:border-emerald-500 transition-colors text-sm"
-              />
-            </div>
+            {(authMode === 'login' || authMode === 'register') && (
+              <>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">Email Address</label>
+                  <input
+                    type="email"
+                    required
+                    placeholder="name@company.com"
+                    value={authFormData.email}
+                    onChange={(e) => setAuthFormData({ ...authFormData, email: e.target.value })}
+                    className="w-full px-4 py-3 bg-slate-950 border border-slate-800 rounded-xl text-slate-200 focus:outline-none focus:border-emerald-500 transition-colors text-sm"
+                  />
+                </div>
 
-            <div>
-              <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">Password</label>
-              <input
-                type="password"
-                required
-                placeholder="••••••••"
-                value={authFormData.password}
-                onChange={(e) => setAuthFormData({ ...authFormData, password: e.target.value })}
-                className="w-full px-4 py-3 bg-slate-950 border border-slate-800 rounded-xl text-slate-200 focus:outline-none focus:border-emerald-500 transition-colors text-sm"
-              />
-            </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">Password</label>
+                  <input
+                    type="password"
+                    required
+                    placeholder="••••••••"
+                    value={authFormData.password}
+                    onChange={(e) => setAuthFormData({ ...authFormData, password: e.target.value })}
+                    className="w-full px-4 py-3 bg-slate-950 border border-slate-800 rounded-xl text-slate-200 focus:outline-none focus:border-emerald-500 transition-colors text-sm"
+                  />
+                </div>
 
-            <button
-              type="submit"
-              className="w-full py-3 bg-emerald-500 hover:bg-emerald-600 font-semibold text-white rounded-xl shadow-lg shadow-emerald-500/20 transition-all text-sm mt-2"
-            >
-              {authMode === 'login' ? 'Sign In to Dashboard' : 'Create Desktop Account'}
-            </button>
+                <button
+                  type="submit"
+                  className="w-full py-3 bg-emerald-500 hover:bg-emerald-600 font-semibold text-white rounded-xl shadow-lg shadow-emerald-500/20 transition-all text-sm mt-2"
+                >
+                  {authMode === 'login' ? 'Sign In to Dashboard' : 'Create Desktop Account'}
+                </button>
+              </>
+            )}
           </form>
         </div>
       </div>
@@ -512,6 +645,17 @@ export default function App() {
             >
               <Users size={18} />
               Team & Seats
+            </button>
+            <button 
+              onClick={() => setActiveTab('admin_licenses')}
+              className={`sidebar-link ${activeTab === 'admin_licenses' ? 'active' : ''} w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 text-sm font-medium ${
+                activeTab === 'admin_licenses' 
+                  ? 'bg-slate-800 text-emerald-400 border border-slate-700/50' 
+                  : 'text-slate-400 hover:bg-slate-900/50 hover:text-slate-200'
+              }`}
+            >
+              <ShieldCheck size={18} />
+              Admin Licenses
             </button>
           </nav>
         </div>
@@ -743,6 +887,10 @@ export default function App() {
 
           {activeTab === 'saas' && (
             <TeamManagementView />
+          )}
+
+          {activeTab === 'admin_licenses' && (
+            <AdminLicenseConsoleView />
           )}
         </div>
       </main>
@@ -4400,6 +4548,581 @@ function AntiBanSuiteView({ settings, onSave }) {
                '🛑 CRITICAL — No engagement detected. Campaign will auto-pause to prevent ban.'}
             </span>
           </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ============================================================================
+// VIEW COMPONENT 9: ADMIN LICENSE & CUSTOMER MANAGEMENT CONSOLE
+// ============================================================================
+function AdminLicenseConsoleView() {
+  const [subTab, setSubTab] = useState('generator'); // 'generator', 'history', 'inspector'
+  const [formData, setFormData] = useState({
+    clientName: '',
+    clientEmail: '',
+    machineId: '',
+    validityDays: '365',
+    sessionsLimit: '5',
+    turboAllowed: true,
+    multiSessionAllowed: true,
+    notes: ''
+  });
+  const [generatedKey, setGeneratedKey] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [errorMsg, setErrorMsg] = useState('');
+  const [copiedKey, setCopiedKey] = useState(false);
+  const [copiedWhatsAppMsg, setCopiedWhatsAppMsg] = useState(false);
+
+  // History State
+  const [licenses, setLicenses] = useState([]);
+  const [historySearch, setHistorySearch] = useState('');
+  const [loadingHistory, setLoadingHistory] = useState(false);
+
+  // Inspector State
+  const [inspectKey, setInspectKey] = useState('');
+  const [inspectResult, setInspectResult] = useState(null);
+  const [inspectError, setInspectError] = useState('');
+
+  const fetchHistory = async () => {
+    try {
+      setLoadingHistory(true);
+      const res = await axios.get(`${API_BASE}/admin/licenses/history`);
+      if (Array.isArray(res.data?.licenses)) {
+        setLicenses(res.data.licenses);
+      }
+    } catch (e) {
+      console.warn('Failed to load license history:', e.message);
+    } finally {
+      setLoadingHistory(false);
+    }
+  };
+
+  useEffect(() => {
+    if (subTab === 'history') {
+      fetchHistory();
+    }
+  }, [subTab]);
+
+  const handleGenerate = async (e) => {
+    e.preventDefault();
+    setErrorMsg('');
+    setGeneratedKey(null);
+    setLoading(true);
+    try {
+      const res = await axios.post(`${API_BASE}/admin/licenses/generate`, formData);
+      if (res.data?.success) {
+        setGeneratedKey(res.data);
+      } else {
+        setErrorMsg(res.data?.error || 'Failed to generate license.');
+      }
+    } catch (err) {
+      setErrorMsg(err.response?.data?.error || 'License generation error: ' + err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleInspect = async (e) => {
+    e.preventDefault();
+    setInspectError('');
+    setInspectResult(null);
+    if (!inspectKey.trim()) return;
+    try {
+      const res = await axios.post(`${API_BASE}/admin/licenses/decode`, { licenseKey: inspectKey.trim() });
+      if (res.data?.success) {
+        setInspectResult(res.data);
+      } else {
+        setInspectError(res.data?.error || 'Could not decode license key.');
+      }
+    } catch (err) {
+      setInspectError(err.response?.data?.error || 'Invalid or malformed license token.');
+    }
+  };
+
+  const handleRevoke = async (id, clientName) => {
+    if (!confirm(`Revoke license for "${clientName}"? The client will no longer be able to use the software.`)) return;
+    try {
+      await axios.post(`${API_BASE}/admin/licenses/revoke`, { id });
+      fetchHistory();
+    } catch (err) {
+      alert('Failed to revoke license: ' + err.message);
+    }
+  };
+
+  const copyLicenseKeyOnly = (key) => {
+    navigator.clipboard.writeText(key);
+    setCopiedKey(true);
+    setTimeout(() => setCopiedKey(false), 2000);
+  };
+
+  const copyWhatsAppFormat = (data) => {
+    const text = `🚀 *WhatsApp Automator Pro — Commercial License Key*
+
+👤 *Client Name:* ${data.clientName || 'Customer'}
+📧 *Email:* ${data.clientEmail}
+📱 *Machine Binding:* \`${data.machineId}\`
+📅 *Validity:* ${data.validityDays} Days (Expires: ${new Date(data.expiresAt).toLocaleDateString()})
+⚡ *WhatsApp Profiles Allowed:* ${data.maxSessions} Sessions
+
+🔑 *Your License Key:*
+\`${data.licenseKey}\`
+
+---
+*How to Activate:*
+1. Install & open *WhatsApp Automator Pro Desktop*
+2. Paste the License Key above in the activation box
+3. Click *Activate License* and start automating!`;
+
+    navigator.clipboard.writeText(text);
+    setCopiedWhatsAppMsg(true);
+    setTimeout(() => setCopiedWhatsAppMsg(false), 2000);
+  };
+
+  const filteredLicenses = licenses.filter(lic => {
+    const q = historySearch.toLowerCase();
+    return (
+      (lic.client_name || '').toLowerCase().includes(q) ||
+      (lic.client_email || '').toLowerCase().includes(q) ||
+      (lic.machine_id || '').toLowerCase().includes(q)
+    );
+  });
+
+  return (
+    <div className="space-y-8 max-w-6xl">
+      {/* Top Header Card */}
+      <div className="glass-panel rounded-2xl p-6 border border-slate-800 flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div className="flex items-center gap-4">
+          <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-700 flex items-center justify-center text-white shadow-lg shadow-emerald-500/20">
+            <ShieldCheck size={26} />
+          </div>
+          <div>
+            <h2 className="text-xl font-heading font-bold text-white tracking-tight">Admin License & Client Hub</h2>
+            <p className="text-xs text-slate-400">Generate node-locked commercial keys, manage client validity, and control access</p>
+          </div>
+        </div>
+
+        {/* Sub-Tab Navigation */}
+        <div className="flex bg-slate-950 p-1 rounded-xl border border-slate-800 text-xs font-semibold">
+          <button
+            onClick={() => setSubTab('generator')}
+            className={`px-4 py-2 rounded-lg transition-all flex items-center gap-1.5 ${
+              subTab === 'generator' ? 'bg-emerald-500 text-white shadow-md' : 'text-slate-400 hover:text-white'
+            }`}
+          >
+            <Sparkles size={14} />
+            <span>Generate Key</span>
+          </button>
+          <button
+            onClick={() => setSubTab('history')}
+            className={`px-4 py-2 rounded-lg transition-all flex items-center gap-1.5 ${
+              subTab === 'history' ? 'bg-emerald-500 text-white shadow-md' : 'text-slate-400 hover:text-white'
+            }`}
+          >
+            <Clock size={14} />
+            <span>Issued History</span>
+          </button>
+          <button
+            onClick={() => setSubTab('inspector')}
+            className={`px-4 py-2 rounded-lg transition-all flex items-center gap-1.5 ${
+              subTab === 'inspector' ? 'bg-emerald-500 text-white shadow-md' : 'text-slate-400 hover:text-white'
+            }`}
+          >
+            <Search size={14} />
+            <span>Inspect / Decode</span>
+          </button>
+        </div>
+      </div>
+
+      {/* SUBTAB 1: LICENSE GENERATOR */}
+      {subTab === 'generator' && (
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+          {/* Generator Form */}
+          <div className="lg:col-span-7 glass-panel rounded-2xl p-6 border border-slate-800 space-y-6">
+            <div className="flex items-center gap-2 pb-4 border-b border-slate-800">
+              <Zap size={18} className="text-amber-400" />
+              <h3 className="text-base font-bold text-white">Generate Commercial Client License</h3>
+            </div>
+
+            {errorMsg && (
+              <div className="p-3 bg-rose-500/10 border border-rose-500/20 rounded-xl text-rose-400 text-xs flex items-center gap-2">
+                <AlertTriangle size={16} />
+                <span>{errorMsg}</span>
+              </div>
+            )}
+
+            <form onSubmit={handleGenerate} className="space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">
+                    Client Name / Business
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. Acme Marketing Agency"
+                    value={formData.clientName}
+                    onChange={(e) => setFormData({ ...formData, clientName: e.target.value })}
+                    className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-slate-200 text-xs focus:outline-none focus:border-emerald-500 transition-colors"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">
+                    Client Email
+                  </label>
+                  <input
+                    type="email"
+                    required
+                    placeholder="client@company.com"
+                    value={formData.clientEmail}
+                    onChange={(e) => setFormData({ ...formData, clientEmail: e.target.value })}
+                    className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-slate-200 text-xs focus:outline-none focus:border-emerald-500 transition-colors"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">
+                  Client Hardware Machine ID (from their PC)
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="WA-WIN-XXXX-XXXX-XXXX-XXXX (or * for unbound)"
+                  value={formData.machineId}
+                  onChange={(e) => setFormData({ ...formData, machineId: e.target.value })}
+                  className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-emerald-300 font-mono text-xs focus:outline-none focus:border-emerald-500 transition-colors"
+                />
+                <p className="text-[10px] text-slate-500 mt-1">
+                  Ask your client to copy their Machine ID from the activation screen of their `.exe` application.
+                </p>
+              </div>
+
+              {/* Validity Presets */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">
+                  License Validity Duration
+                </label>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                  {[
+                    ['1 Month', '30', '30 Days Trial'],
+                    ['3 Months', '90', 'Quarterly'],
+                    ['1 Year', '365', 'Annual Pro'],
+                    ['Lifetime', '3650', 'VIP Permanent']
+                  ].map(([label, days, desc]) => (
+                    <button
+                      key={days}
+                      type="button"
+                      onClick={() => setFormData({ ...formData, validityDays: days })}
+                      className={`p-2.5 rounded-xl border text-left transition-all ${
+                        formData.validityDays === days
+                          ? 'bg-emerald-500/15 border-emerald-500 text-white shadow-md'
+                          : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-slate-200'
+                      }`}
+                    >
+                      <p className="text-xs font-bold">{label}</p>
+                      <p className="text-[10px] text-slate-500">{desc}</p>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* WhatsApp Profile Slots & Permissions */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">
+                    WhatsApp Profile Quota
+                  </label>
+                  <select
+                    value={formData.sessionsLimit}
+                    onChange={(e) => setFormData({ ...formData, sessionsLimit: e.target.value })}
+                    className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-slate-200 text-xs focus:outline-none focus:border-emerald-500 transition-colors"
+                  >
+                    <option value="1">1 WhatsApp Profile</option>
+                    <option value="3">3 WhatsApp Profiles (Starter)</option>
+                    <option value="5">5 WhatsApp Profiles (Pro)</option>
+                    <option value="10">10 WhatsApp Profiles (Agency)</option>
+                    <option value="20">20 WhatsApp Profiles (Enterprise)</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">
+                    Admin Notes / Ref
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Paid via UPI Ref #987654"
+                    value={formData.notes}
+                    onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+                    className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-slate-200 text-xs focus:outline-none focus:border-emerald-500 transition-colors"
+                  />
+                </div>
+              </div>
+
+              {/* Feature Toggles */}
+              <div className="p-3 bg-slate-950/80 border border-slate-800 rounded-xl flex items-center justify-between text-xs">
+                <label className="flex items-center gap-2 cursor-pointer text-slate-300">
+                  <input
+                    type="checkbox"
+                    checked={formData.turboAllowed}
+                    onChange={(e) => setFormData({ ...formData, turboAllowed: e.target.checked })}
+                    className="rounded text-emerald-500 focus:ring-0 bg-slate-900 border-slate-700"
+                  />
+                  <span>Allow Turbo Mode Bypass</span>
+                </label>
+
+                <label className="flex items-center gap-2 cursor-pointer text-slate-300">
+                  <input
+                    type="checkbox"
+                    checked={formData.multiSessionAllowed}
+                    onChange={(e) => setFormData({ ...formData, multiSessionAllowed: e.target.checked })}
+                    className="rounded text-emerald-500 focus:ring-0 bg-slate-900 border-slate-700"
+                  />
+                  <span>Allow Multi-Device Auto-Split</span>
+                </label>
+              </div>
+
+              <button
+                type="submit"
+                disabled={loading}
+                className="w-full py-3.5 bg-emerald-500 hover:bg-emerald-600 font-bold text-white rounded-xl shadow-lg shadow-emerald-500/20 transition-all text-sm flex items-center justify-center gap-2 disabled:opacity-50"
+              >
+                <ShieldCheck size={18} />
+                <span>{loading ? 'Generating Asymmetric Ed25519 Token...' : '⚡ Generate Commercial License Key'}</span>
+              </button>
+            </form>
+          </div>
+
+          {/* Generated Result Container */}
+          <div className="lg:col-span-5 space-y-6">
+            {generatedKey ? (
+              <div className="glass-panel rounded-2xl p-6 border border-emerald-500/40 bg-emerald-950/10 space-y-5 animate-fade-in">
+                <div className="flex items-center gap-2 text-emerald-400">
+                  <CheckCircle size={20} />
+                  <h4 className="font-bold text-base text-white">License Generated Successfully!</h4>
+                </div>
+
+                <div className="p-4 bg-slate-950 border border-slate-800 rounded-xl space-y-2">
+                  <p className="text-[10px] uppercase font-bold tracking-wider text-slate-400">Signed License Token</p>
+                  <p className="font-mono text-xs text-emerald-300 break-all bg-slate-900/90 p-2.5 rounded-lg border border-slate-800 select-all">
+                    {generatedKey.licenseKey}
+                  </p>
+                </div>
+
+                <div className="space-y-1.5 text-xs text-slate-300 bg-slate-950/60 p-3.5 rounded-xl border border-slate-800">
+                  <div className="flex justify-between"><span className="text-slate-500">Client:</span><span className="font-bold text-white">{generatedKey.clientName}</span></div>
+                  <div className="flex justify-between"><span className="text-slate-500">Email:</span><span>{generatedKey.clientEmail}</span></div>
+                  <div className="flex justify-between"><span className="text-slate-500">Node Lock:</span><span className="font-mono text-emerald-400 text-[11px]">{generatedKey.machineId}</span></div>
+                  <div className="flex justify-between"><span className="text-slate-500">Validity:</span><span>{generatedKey.validityDays} Days</span></div>
+                  <div className="flex justify-between"><span className="text-slate-500">Profiles:</span><span>{generatedKey.maxSessions} Max WhatsApp Sessions</span></div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
+                  <button
+                    onClick={() => copyLicenseKeyOnly(generatedKey.licenseKey)}
+                    className="py-2.5 px-3 bg-slate-800 hover:bg-slate-700 text-white rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 shadow"
+                  >
+                    {copiedKey ? <Check size={14} className="text-emerald-400" /> : <Copy size={14} />}
+                    <span>{copiedKey ? 'Copied Key!' : 'Copy Key Only'}</span>
+                  </button>
+
+                  <button
+                    onClick={() => copyWhatsAppFormat(generatedKey)}
+                    className="py-2.5 px-3 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 shadow-lg shadow-emerald-500/20"
+                  >
+                    {copiedWhatsAppMsg ? <Check size={14} /> : <Send size={14} />}
+                    <span>{copiedWhatsAppMsg ? 'Copied for WhatsApp!' : '💬 Copy for WhatsApp'}</span>
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="glass-panel rounded-2xl p-6 border border-slate-800 text-center py-16 space-y-3">
+                <ShieldCheck size={36} className="mx-auto text-slate-600" />
+                <h4 className="text-sm font-bold text-slate-300">Ready to Issue License</h4>
+                <p className="text-xs text-slate-500 max-w-xs mx-auto">
+                  Fill in the client details and Machine ID on the left to generate an offline cryptographic Ed25519 license key.
+                </p>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* SUBTAB 2: ISSUED HISTORY TABLE */}
+      {subTab === 'history' && (
+        <div className="glass-panel rounded-2xl p-6 border border-slate-800 space-y-6">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pb-4 border-b border-slate-800">
+            <div>
+              <h3 className="text-base font-bold text-white">Issued Commercial Licenses</h3>
+              <p className="text-xs text-slate-400">Track active client activations and remaining validity</p>
+            </div>
+
+            <div className="flex items-center gap-2 w-full sm:w-auto">
+              <div className="relative flex-1 sm:w-64">
+                <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
+                <input
+                  type="text"
+                  placeholder="Search client, email or machine..."
+                  value={historySearch}
+                  onChange={(e) => setHistorySearch(e.target.value)}
+                  className="w-full pl-9 pr-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs text-slate-200 focus:outline-none focus:border-emerald-500"
+                />
+              </div>
+              <button
+                onClick={fetchHistory}
+                className="p-2 bg-slate-900 border border-slate-800 hover:bg-slate-800 text-slate-300 rounded-xl"
+              >
+                <RefreshCw size={16} className={loadingHistory ? 'animate-spin' : ''} />
+              </button>
+            </div>
+          </div>
+
+          {filteredLicenses.length === 0 ? (
+            <div className="text-center py-12 text-slate-500 text-xs">
+              No issued licenses found matching your search.
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs">
+                <thead>
+                  <tr className="border-b border-slate-800 text-slate-400 uppercase tracking-wider text-[10px]">
+                    <th className="py-3 px-3">Client</th>
+                    <th className="py-3 px-3">Bound Machine ID</th>
+                    <th className="py-3 px-3">Validity</th>
+                    <th className="py-3 px-3">Sessions</th>
+                    <th className="py-3 px-3">Status</th>
+                    <th className="py-3 px-3 text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-800/60">
+                  {filteredLicenses.map((lic) => (
+                    <tr key={lic.id} className="hover:bg-slate-900/40 transition-colors">
+                      <td className="py-3 px-3">
+                        <p className="font-bold text-white">{lic.client_name}</p>
+                        <p className="text-[10px] text-slate-400">{lic.client_email}</p>
+                      </td>
+                      <td className="py-3 px-3">
+                        <span className="font-mono text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20 text-[11px]">
+                          {lic.machine_id}
+                        </span>
+                      </td>
+                      <td className="py-3 px-3">
+                        <p className="font-semibold text-slate-200">{lic.days_remaining}d remaining</p>
+                        <p className="text-[10px] text-slate-500">{lic.validity_days} days total</p>
+                      </td>
+                      <td className="py-3 px-3 font-semibold text-slate-300">
+                        {lic.sessions_limit} Profiles
+                      </td>
+                      <td className="py-3 px-3">
+                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded ${
+                          lic.status === 'active' && !lic.is_expired
+                            ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                            : lic.status === 'revoked'
+                            ? 'bg-rose-500/20 text-rose-400 border border-rose-500/30'
+                            : 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
+                        }`}>
+                          {lic.status === 'revoked' ? 'Revoked' : lic.is_expired ? 'Expired' : 'Active'}
+                        </span>
+                      </td>
+                      <td className="py-3 px-3 text-right">
+                        <div className="flex items-center justify-end gap-2">
+                          <button
+                            onClick={() => copyLicenseKeyOnly(lic.license_key)}
+                            title="Copy License Key"
+                            className="p-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg transition-colors"
+                          >
+                            <Copy size={13} />
+                          </button>
+                          {lic.status === 'active' && (
+                            <button
+                              onClick={() => handleRevoke(lic.id, lic.client_name)}
+                              title="Revoke License"
+                              className="p-1.5 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 rounded-lg border border-rose-500/30 transition-colors"
+                            >
+                              <X size={13} />
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* SUBTAB 3: INSPECTOR / DECODER */}
+      {subTab === 'inspector' && (
+        <div className="glass-panel rounded-2xl p-6 border border-slate-800 space-y-6">
+          <div className="pb-4 border-b border-slate-800">
+            <h3 className="text-base font-bold text-white">License Key Inspector & Cryptographic Decoder</h3>
+            <p className="text-xs text-slate-400">Paste any WALIC license token to verify its signature and unpack its permissions</p>
+          </div>
+
+          {inspectError && (
+            <div className="p-3 bg-rose-500/10 border border-rose-500/20 rounded-xl text-rose-400 text-xs flex items-center gap-2">
+              <AlertTriangle size={16} />
+              <span>{inspectError}</span>
+            </div>
+          )}
+
+          <form onSubmit={handleInspect} className="space-y-4">
+            <div>
+              <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">
+                Enter WALIC Token
+              </label>
+              <textarea
+                rows={3}
+                required
+                placeholder="WALIC.eyJjdXN0b21lciI6IkFjbWUiLCJub2RlTG9ja0lkIjoiV0EtV0lOLTEyMzQtNTY3OC...\"
+                value={inspectKey}
+                onChange={(e) => setInspectKey(e.target.value)}
+                className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-emerald-300 font-mono text-xs focus:outline-none focus:border-emerald-500 transition-colors"
+              />
+            </div>
+
+            <button
+              type="submit"
+              className="py-2.5 px-5 bg-slate-800 hover:bg-slate-700 text-white font-bold rounded-xl text-xs transition-colors flex items-center gap-1.5"
+            >
+              <Search size={14} />
+              <span>Decode & Verify Signature</span>
+            </button>
+          </form>
+
+          {inspectResult && (
+            <div className="p-5 bg-slate-950 border border-slate-800 rounded-xl space-y-4 animate-fade-in">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  {inspectResult.valid ? (
+                    <span className="px-2.5 py-1 rounded bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-xs font-bold flex items-center gap-1">
+                      <CheckCircle size={14} /> Valid Cryptographic Ed25519 Signature
+                    </span>
+                  ) : (
+                    <span className="px-2.5 py-1 rounded bg-rose-500/20 text-rose-400 border border-rose-500/30 text-xs font-bold flex items-center gap-1">
+                      <XCircle size={14} /> Signature Invalid or Key Tampered
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              {inspectResult.payload && (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs bg-slate-900/60 p-4 rounded-xl border border-slate-800">
+                  <div><span className="text-slate-500">Customer:</span> <strong className="text-white">{inspectResult.payload.customer}</strong></div>
+                  <div><span className="text-slate-500">Bound Machine:</span> <strong className="font-mono text-emerald-400">{inspectResult.payload.nodeLockId}</strong></div>
+                  <div><span className="text-slate-500">Issued At:</span> <span className="text-slate-300">{new Date(inspectResult.payload.issuedAt).toLocaleString()}</span></div>
+                  <div><span className="text-slate-500">Expires At:</span> <span className="text-slate-300">{new Date(inspectResult.payload.expiryDate).toLocaleString()}</span></div>
+                  <div><span className="text-slate-500">Max Sessions:</span> <span className="text-slate-300">{inspectResult.payload.maxSessions} Profiles</span></div>
+                  <div><span className="text-slate-500">Features:</span> <span className="text-slate-300">{(inspectResult.payload.features || []).join(', ')}</span></div>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       )}
     </div>

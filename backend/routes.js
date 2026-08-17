@@ -1796,6 +1796,166 @@ router.post('/license/activate', async (req, res) => {
   }
 });
 
+// ==========================================
+// 8. Admin Commercial License Management Endpoints
+// ==========================================
+
+// Generate a signed commercial license
+router.post('/admin/licenses/generate', async (req, res) => {
+  try {
+    const { 
+      clientName, 
+      clientEmail, 
+      machineId, 
+      validityDays = 365, 
+      sessionsLimit = 5,
+      turboAllowed = true,
+      multiSessionAllowed = true,
+      notes = '' 
+    } = req.body || {};
+
+    if (!clientEmail || !machineId) {
+      return res.status(400).json({ success: false, error: 'Client email and Machine ID are required.' });
+    }
+
+    const { createLicenseKey } = await import('./utils/licenseGenerator.js');
+    const { run } = await import('./database.js');
+
+    const days = parseInt(validityDays) || 365;
+    const expiryDate = new Date(Date.now() + days * 24 * 60 * 60 * 1000).toISOString();
+    const maxSessions = parseInt(sessionsLimit) || 5;
+
+    const features = [
+      'unlimited_campaigns',
+      'anti_ban_warmup',
+      'spintax_engine',
+      'audience_hub_import'
+    ];
+    if (turboAllowed) features.push('turbo_mode_bypass');
+    if (multiSessionAllowed) features.push('multi_device_sessions');
+
+    const licenseKey = createLicenseKey({
+      customer: clientName || clientEmail,
+      client_name: clientName || clientEmail,
+      nodeLockId: machineId.trim(),
+      expiryDate,
+      maxSessions,
+      features,
+      gracePeriodDays: 14
+    });
+
+    // Save to database table
+    await run(`
+      INSERT INTO issued_licenses (
+        client_name, client_email, machine_id, license_key,
+        plan_type, validity_days, sessions_limit, turbo_allowed,
+        multi_session_allowed, status, notes
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?)
+    `, [
+      clientName || clientEmail,
+      clientEmail.trim(),
+      machineId.trim(),
+      licenseKey,
+      days >= 3650 ? 'lifetime_commercial' : 'pro_commercial',
+      days,
+      maxSessions,
+      turboAllowed ? 1 : 0,
+      multiSessionAllowed ? 1 : 0,
+      notes
+    ]);
+
+    res.json({
+      success: true,
+      licenseKey,
+      clientName: clientName || clientEmail,
+      clientEmail: clientEmail.trim(),
+      machineId: machineId.trim(),
+      validityDays: days,
+      expiresAt: expiryDate,
+      maxSessions,
+      features
+    });
+  } catch (error) {
+    console.error('Error generating admin license:', error);
+    res.status(500).json({ success: false, error: 'Failed to generate license: ' + error.message });
+  }
+});
+
+// Fetch all issued licenses
+router.get('/admin/licenses/history', async (req, res) => {
+  try {
+    const { all } = await import('./database.js');
+    const licenses = await all(`SELECT * FROM issued_licenses ORDER BY id DESC`);
+    res.json({
+      success: true,
+      licenses: (licenses || []).map(lic => {
+        const createdTime = new Date(lic.created_at).getTime();
+        const expiryTime = createdTime + (lic.validity_days * 24 * 60 * 60 * 1000);
+        const daysLeft = Math.max(0, Math.ceil((expiryTime - Date.now()) / (24 * 60 * 60 * 1000)));
+        return {
+          ...lic,
+          expires_at: new Date(expiryTime).toISOString(),
+          days_remaining: daysLeft,
+          is_expired: daysLeft === 0
+        };
+      })
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Decode and inspect any license token
+router.post('/admin/licenses/decode', async (req, res) => {
+  try {
+    const { licenseKey } = req.body || {};
+    if (!licenseKey || typeof licenseKey !== 'string') {
+      return res.status(400).json({ success: false, error: 'License key is required.' });
+    }
+
+    const { verifyLicenseToken, fromBase64Url } = await import('./utils/licenseGenerator.js');
+    const verification = verifyLicenseToken(licenseKey.trim());
+    
+    let payload = null;
+    const parts = licenseKey.trim().split('.');
+    if (parts.length === 3 && parts[0] === 'WALIC') {
+      try {
+        payload = JSON.parse(fromBase64Url(parts[1]).toString('utf8'));
+      } catch (_e) {}
+    }
+
+    res.json({
+      success: true,
+      valid: verification.valid,
+      reason: verification.reason,
+      payload: payload || verification.payload
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Revoke a license
+router.post('/admin/licenses/revoke', async (req, res) => {
+  try {
+    const { id, licenseKey } = req.body || {};
+    const { run } = await import('./database.js');
+    const now = new Date().toISOString();
+    
+    if (id) {
+      await run(`UPDATE issued_licenses SET status = 'revoked', revoked_at = ? WHERE id = ?`, [now, id]);
+    } else if (licenseKey) {
+      await run(`UPDATE issued_licenses SET status = 'revoked', revoked_at = ? WHERE license_key = ?`, [now, licenseKey.trim()]);
+    } else {
+      return res.status(400).json({ success: false, error: 'License ID or key is required.' });
+    }
+
+    res.json({ success: true, message: 'License revoked successfully.' });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 export default router;
 
 

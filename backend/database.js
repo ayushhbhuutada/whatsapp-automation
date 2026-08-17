@@ -240,6 +240,26 @@ function initDb() {
     )
   `);
 
+  // 13. Admin Issued Commercial Licenses Table
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS issued_licenses (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      client_name TEXT NOT NULL,
+      client_email TEXT NOT NULL,
+      machine_id TEXT NOT NULL,
+      license_key TEXT NOT NULL UNIQUE,
+      plan_type TEXT DEFAULT 'pro_commercial',
+      validity_days INTEGER DEFAULT 365,
+      sessions_limit INTEGER DEFAULT 5,
+      turbo_allowed INTEGER DEFAULT 1,
+      multi_session_allowed INTEGER DEFAULT 1,
+      status TEXT DEFAULT 'active',
+      notes TEXT DEFAULT '',
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      revoked_at TEXT
+    )
+  `);
+
   // Migrations for existing database files
   const addColumnSafely = (table, columnDef) => {
     try {
