@@ -2,10 +2,16 @@ import React, { useState, useEffect } from 'react';
 
 const getApiServer = () => {
   if (typeof window === 'undefined') return 'http://127.0.0.1:5000';
+  const saved = localStorage.getItem('api_server_url');
+  if (saved && saved.trim()) return saved.trim().replace(/\/+$/, '');
+  
   const protocol = window.location.protocol;
   const hostname = window.location.hostname || '127.0.0.1';
   if (window.location.port === '5173') {
     return `${protocol}//${hostname}:5000`;
+  }
+  if (hostname.endsWith('.vercel.app') || hostname.endsWith('.netlify.app')) {
+    return 'http://127.0.0.1:5000';
   }
   return window.location.origin;
 };
@@ -35,9 +41,12 @@ export default function SessionManager({ token, onSelectSession, activeSessionNa
       }
       if (Array.isArray(data)) {
         setSessions(data);
+      } else {
+        setSessions([]);
       }
     } catch (err) {
       console.error('Error fetching sessions:', err);
+      setSessions([]);
     } finally {
       if (showLoadingSpinner) {
         setLoading(false);
@@ -54,7 +63,7 @@ export default function SessionManager({ token, onSelectSession, activeSessionNa
     return () => clearInterval(interval);
   }, [token]);
 
-  const selectedSession = sessions.find(s => s.session_name === selectedSessionName) || null;
+  const selectedSession = (Array.isArray(sessions) ? sessions : []).find(s => s && s.session_name === selectedSessionName) || null;
 
   useEffect(() => {
     if (selectedSession && (selectedSession.connected || selectedSession.status === 'Connected')) {

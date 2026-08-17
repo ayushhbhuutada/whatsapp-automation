@@ -44,11 +44,18 @@ import {
 
 const getApiServer = () => {
   if (typeof window === 'undefined') return 'http://127.0.0.1:5000';
+  const saved = localStorage.getItem('api_server_url');
+  if (saved && saved.trim()) return saved.trim().replace(/\/+$/, '');
+  
   const protocol = window.location.protocol;
   const hostname = window.location.hostname || '127.0.0.1';
   // If running via Vite dev server (port 5173), target backend at 5000
   if (window.location.port === '5173') {
     return `${protocol}//${hostname}:5000`;
+  }
+  // When running on Vercel or cloud web host without local proxy, target local desktop backend on port 5000
+  if (hostname.endsWith('.vercel.app') || hostname.endsWith('.netlify.app')) {
+    return 'http://127.0.0.1:5000';
   }
   return window.location.origin;
 };
@@ -186,16 +193,18 @@ export default function App() {
   const fetchCampaigns = async () => {
     try {
       const res = await axios.get(`${API_BASE}/campaigns`);
-      setCampaigns(res.data);
+      const list = Array.isArray(res.data) ? res.data : (Array.isArray(res.data?.campaigns) ? res.data.campaigns : []);
+      setCampaigns(list);
     } catch (err) {
       console.error('Error fetching campaigns:', err);
+      setCampaigns([]);
     }
   };
 
   const fetchAutomationStatus = async () => {
     try {
       const res = await axios.get(`${API_BASE}/automation/status`);
-      setAutomationStatus(res.data);
+      setAutomationStatus(res.data && typeof res.data === 'object' ? res.data : {});
     } catch (err) {
       console.error('Error fetching automation status:', err);
     }
@@ -206,19 +215,22 @@ export default function App() {
       const res = await axios.get(`${API_BASE}/contacts`, {
         params: { campaignId, search, status }
       });
-      setContacts(res.data);
+      const list = Array.isArray(res.data) ? res.data : (Array.isArray(res.data?.contacts) ? res.data.contacts : []);
+      setContacts(list);
     } catch (err) {
       console.error('Error fetching contacts:', err);
+      setContacts([]);
     }
   };
 
   const fetchLogs = async (campaignId) => {
     try {
       const res = await axios.get(`${API_BASE}/logs`, { params: { campaignId } });
-      setLogs(res.data);
+      const logList = Array.isArray(res.data) ? res.data : (Array.isArray(res.data?.logs) ? res.data.logs : []);
+      setLogs(logList);
       
       // Look for QR scan alert logs to notify the user
-      const qrLog = res.data.find(log => log.level === 'warning' && log.message.includes('QR code'));
+      const qrLog = logList.find(log => log && log.level === 'warning' && String(log.message || '').includes('QR code'));
       if (qrLog) {
         setSystemAlert({
           type: 'warning',
@@ -229,6 +241,7 @@ export default function App() {
       }
     } catch (err) {
       console.error('Error fetching logs:', err);
+      setLogs([]);
     }
   };
 
@@ -287,7 +300,7 @@ export default function App() {
     setTimeout(() => setIsRefreshing(false), 800);
   };
 
-  const selectedCampaign = campaigns.find(c => c.id.toString() === selectedCampaignId);
+  const selectedCampaign = (Array.isArray(campaigns) ? campaigns : []).find(c => c && c.id && c.id.toString() === selectedCampaignId) || null;
 
   // Render Authentication Portal if not logged in
   if (!user || !token) {
