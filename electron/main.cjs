@@ -326,6 +326,15 @@ function createWindow(port) {
     }
   });
 
+  mainWindow.webContents.on('did-fail-load', (event, errorCode, errorDescription, validatedURL) => {
+    console.warn(`[Electron] Load failure (${errorCode}: ${errorDescription}) at ${validatedURL}. Retrying...`);
+    setTimeout(() => {
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.loadURL(`http://localhost:${port}`);
+      }
+    }, 1200);
+  });
+
   mainWindow.on('close', (event) => {
     if (app && !app.isQuitting) {
       event.preventDefault();

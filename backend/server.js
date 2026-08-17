@@ -76,9 +76,29 @@ app.use('/uploads', express.static(uploadsDir));
 const attachmentsDir = getAttachmentsDir();
 app.use('/attachments', express.static(attachmentsDir));
 
-// Serve frontend production build statically in production mode
-const frontendDistDir = path.resolve(__dirname, '../frontend/dist');
+// Resolve frontend dist directory across all production packaging environments
+function getFrontendDistDir() {
+  const possiblePaths = [
+    path.resolve(__dirname, '../frontend/dist'),
+    process.resourcesPath ? path.join(process.resourcesPath, 'app.asar.unpacked', 'frontend', 'dist') : null,
+    process.resourcesPath ? path.join(process.resourcesPath, 'app.asar', 'frontend', 'dist') : null,
+    path.resolve(__dirname, '../../frontend/dist'),
+    path.resolve(__dirname, 'public')
+  ].filter(Boolean);
+
+  for (const p of possiblePaths) {
+    try {
+      if (fs.existsSync(p) && fs.existsSync(path.join(p, 'index.html'))) {
+        return p;
+      }
+    } catch (e) {}
+  }
+  return path.resolve(__dirname, '../frontend/dist');
+}
+
+const frontendDistDir = getFrontendDistDir();
 if (fs.existsSync(frontendDistDir)) {
+  console.log(`[Server] Serving frontend build from: ${frontendDistDir}`);
   app.use(express.static(frontendDistDir));
   app.get('*', (req, res, next) => {
     if (req.path.startsWith('/api') || req.path.startsWith('/uploads') || req.path.startsWith('/attachments')) {
@@ -86,6 +106,8 @@ if (fs.existsSync(frontendDistDir)) {
     }
     res.sendFile(path.join(frontendDistDir, 'index.html'));
   });
+} else {
+  console.warn(`[Server Warning] Frontend dist directory not found at: ${frontendDistDir}`);
 }
 
 // Fallback error handler
