@@ -4693,7 +4693,7 @@ const DEFAULT_STORE_CONFIG_FRONTEND = {
   brandTagline: 'Commercial Desktop Automation Suite',
   supportEmail: 'support@rudraexpression.in',
   supportWhatsapp: '+919876543210',
-  downloadUrl: 'https://github.com/ayushhbhuutada/whatsapp-automation/releases/latest/download/WhatsAppAutomationSetup.exe',
+  downloadUrl: 'https://github.com/ayushhbhuutada/whatsapp-automation/releases/download/v1.0.0/WhatsAppAutomationSetup.exe',
   razorpayKeyId: '',
   razorpayKeySecret: '',
   plans: [
@@ -6067,7 +6067,7 @@ function PublicLandingView({
   const [publicConfig, setPublicConfig] = useState({
     brandName: 'WhatsApp Automator Pro',
     brandTagline: 'Commercial Desktop Edition',
-    downloadUrl: 'https://github.com/ayushhbhuutada/whatsapp-automation/releases/latest/download/WhatsAppAutomationSetup.exe',
+    downloadUrl: 'https://github.com/ayushhbhuutada/whatsapp-automation/releases/download/v1.0.0/WhatsAppAutomationSetup.exe',
     supportEmail: 'support@rudraexpression.in',
     supportWhatsapp: '+919876543210'
   });
@@ -6082,7 +6082,7 @@ function PublicLandingView({
       .catch(() => {});
   }, []);
 
-  const downloadUrl = publicConfig.downloadUrl || "https://github.com/ayushhbhuutada/whatsapp-automation/releases/latest/download/WhatsAppAutomationSetup.exe";
+  const downloadUrl = publicConfig.downloadUrl || "https://github.com/ayushhbhuutada/whatsapp-automation/releases/download/v1.0.0/WhatsAppAutomationSetup.exe";
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col selection:bg-emerald-500 selection:text-slate-950">
