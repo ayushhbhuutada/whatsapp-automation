@@ -80,6 +80,7 @@ export default function App() {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [campaigns, setCampaigns] = useState([]);
   const [selectedCampaignId, setSelectedCampaignId] = useState('');
+  const selectedCampaign = campaigns.find(c => c.id.toString() === selectedCampaignId?.toString()) || campaigns[0] || null;
   const [contacts, setContacts] = useState([]);
   const [logs, setLogs] = useState([]);
   const [settings, setSettings] = useState({});
