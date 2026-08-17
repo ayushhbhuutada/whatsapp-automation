@@ -162,10 +162,12 @@ export default function App() {
 
   // Set selected campaign initially to the latest one
   useEffect(() => {
-    if (campaigns.length > 0 && !selectedCampaignId) {
-      setSelectedCampaignId(campaigns[0].id.toString());
-      fetchContacts(campaigns[0].id);
-      fetchLogs(campaigns[0].id);
+    if (Array.isArray(campaigns) && campaigns.length > 0 && !selectedCampaignId) {
+      if (campaigns[0] && campaigns[0].id) {
+        setSelectedCampaignId(campaigns[0].id.toString());
+        fetchContacts(campaigns[0].id);
+        fetchLogs(campaigns[0].id);
+      }
     }
   }, [campaigns]);
 
@@ -2136,9 +2138,11 @@ function CreateCampaignView({ onSuccess, settings, campaigns = [], duplicateCamp
               type="button"
               onClick={() => {
                 setSessionMode('single');
-                if (availableSessions.length > 0 && (sessionName === 'auto_split' || !sessionName)) {
-                  const firstSess = availableSessions.find(s => s.status === 'CONNECTED' || s.status === 'Connected') || availableSessions[0];
-                  setSessionName(firstSess.session_name || firstSess.name || 'default');
+                if (Array.isArray(availableSessions) && availableSessions.length > 0 && (sessionName === 'auto_split' || !sessionName)) {
+                  const firstSess = availableSessions.find(s => s && (s.status === 'CONNECTED' || s.status === 'Connected')) || availableSessions[0];
+                  if (firstSess) {
+                    setSessionName(firstSess.session_name || firstSess.name || 'default');
+                  }
                 }
               }}
               className={`p-3 rounded-xl border text-left transition-all ${
