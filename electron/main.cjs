@@ -4,10 +4,11 @@ const fs = require('fs');
 const os = require('os');
 const net = require('net');
 const http = require('http');
-const { spawn, fork } = require('child_process');
+const { spawn } = require('child_process');
 const crypto = require('crypto');
 
 let mainWindow = null;
+let splashWindow = null;
 let tray = null;
 let serverProcess = null;
 let selectedPort = 5000;
@@ -25,7 +26,8 @@ function getAppDataPaths() {
     dbPath: path.join(baseDir, 'db.sqlite'),
     sessionPath: path.join(baseDir, 'sessions'),
     uploadsPath: path.join(baseDir, 'uploads'),
-    attachmentsPath: path.join(baseDir, 'attachments')
+    attachmentsPath: path.join(baseDir, 'attachments'),
+    logsPath: path.join(baseDir, 'logs')
   };
 
   try {
@@ -33,11 +35,56 @@ function getAppDataPaths() {
     if (!fs.existsSync(paths.sessionPath)) fs.mkdirSync(paths.sessionPath, { recursive: true });
     if (!fs.existsSync(paths.uploadsPath)) fs.mkdirSync(paths.uploadsPath, { recursive: true });
     if (!fs.existsSync(paths.attachmentsPath)) fs.mkdirSync(paths.attachmentsPath, { recursive: true });
+    if (!fs.existsSync(paths.logsPath)) fs.mkdirSync(paths.logsPath, { recursive: true });
   } catch (e) {
     console.error('[Electron Main] Error initializing AppData subdirectories:', e);
   }
 
   return paths;
+}
+
+/**
+ * Creates lightweight splash / startup dialogue box
+ */
+function createSplashWindow() {
+  splashWindow = new BrowserWindow({
+    width: 440,
+    height: 290,
+    resizable: false,
+    frame: false,
+    transparent: false,
+    backgroundColor: '#020617',
+    center: true,
+    show: false,
+    alwaysOnTop: true,
+    skipTaskbar: false,
+    webPreferences: {
+      nodeIntegration: false,
+      contextIsolation: true
+    }
+  });
+
+  const splashPath = path.join(__dirname, 'splash.html');
+  if (fs.existsSync(splashPath)) {
+    splashWindow.loadFile(splashPath);
+  }
+
+  splashWindow.once('ready-to-show', () => {
+    if (splashWindow && !splashWindow.isDestroyed()) {
+      splashWindow.show();
+    }
+  });
+}
+
+/**
+ * Updates status text in splash screen
+ */
+function updateSplashStatus(statusText) {
+  if (splashWindow && !splashWindow.isDestroyed() && splashWindow.webContents) {
+    splashWindow.webContents.executeJavaScript(
+      `var el = document.getElementById('status'); if(el) el.textContent = ${JSON.stringify(statusText)};`
+    ).catch(() => {});
+  }
 }
 
 /**
@@ -67,24 +114,41 @@ function findAvailablePort(startPort = 5000, endPort = 5010) {
 /**
  * Polls backend HTTP server until ready or max attempts reached
  */
-function checkServerReady(url, maxAttempts = 40) {
+function checkServerReady(url, maxAttempts = 35) {
   return new Promise((resolve) => {
     let attempts = 0;
     const interval = setInterval(() => {
       attempts++;
-      http.get(url, (res) => {
+      const req = http.get(url, (res) => {
         if (res.statusCode < 500) {
           clearInterval(interval);
           resolve(true);
         }
-      }).on('error', () => {
+      });
+      req.on('error', () => {
         if (attempts >= maxAttempts) {
           clearInterval(interval);
           resolve(false);
         }
       });
+      req.setTimeout(800, () => {
+        req.destroy();
+      });
     }, 400);
   });
+}
+
+/**
+ * Resolves path to backend server.js in both dev and packaged production
+ */
+function getBackendServerPath() {
+  if (process.resourcesPath) {
+    const unpackedPath = path.join(process.resourcesPath, 'app.asar.unpacked', 'backend', 'server.js');
+    if (fs.existsSync(unpackedPath)) {
+      return unpackedPath;
+    }
+  }
+  return path.resolve(__dirname, '../backend/server.js');
 }
 
 /**
@@ -92,13 +156,19 @@ function checkServerReady(url, maxAttempts = 40) {
  */
 function startBackendServer(port) {
   const appPaths = getAppDataPaths();
-  const serverPath = path.resolve(__dirname, '../backend/server.js');
+  const serverPath = getBackendServerPath();
+  const backendDir = path.dirname(serverPath);
+  const backendNodeModules = path.join(backendDir, 'node_modules');
+  const rootNodeModules = path.resolve(backendDir, '../node_modules');
+
+  const nodePath = [backendNodeModules, rootNodeModules].join(path.delimiter);
 
   const env = {
     ...process.env,
     PORT: String(port),
     NODE_ENV: 'production',
     IS_ELECTRON: 'true',
+    NODE_PATH: nodePath,
     APPDATA_DIR: appPaths.appData,
     DB_PATH: appPaths.dbPath,
     SESSIONS_DIR: appPaths.sessionPath,
@@ -107,20 +177,33 @@ function startBackendServer(port) {
     ELECTRON_RUN_AS_NODE: '1'
   };
 
-  // Launch server using Electron as Node runner or node binary
   const nodeExecutable = process.execPath;
+  const logFile = path.join(appPaths.logsPath, 'backend_startup.log');
+  const logStream = fs.createWriteStream(logFile, { flags: 'a' });
+
   serverProcess = spawn(nodeExecutable, [serverPath], {
     env,
-    stdio: 'inherit',
+    cwd: backendDir,
+    stdio: ['ignore', 'pipe', 'pipe'],
     windowsHide: true
   });
 
+  if (serverProcess.stdout) {
+    serverProcess.stdout.pipe(logStream);
+  }
+  if (serverProcess.stderr) {
+    serverProcess.stderr.pipe(logStream);
+  }
+
   serverProcess.on('error', (err) => {
     console.error('[Electron Main] Backend server spawn error:', err);
+    try {
+      fs.appendFileSync(logFile, `[Spawn Error] ${err.message}\n`);
+    } catch (e) {}
   });
 
   serverProcess.on('exit', (code, signal) => {
-    console.log(`[Electron Main] Backend server exited with code: ${code}, signal: ${signal}`);
+    console.log(`[Electron Main] Backend server exited: code=${code}, signal=${signal}`);
   });
 }
 
@@ -134,7 +217,6 @@ function registerIpcHandlers() {
       const { getMachineId } = await import('../backend/services/hardwareIdService.js');
       return getMachineId();
     } catch (e) {
-      // Fallback machine ID derivation
       const mac = os.hostname() + ':::' + os.arch() + ':::' + os.platform();
       const hash = crypto.createHash('sha256').update(mac).digest('hex').toUpperCase();
       return `WA-WIN-${hash.slice(0, 4)}-${hash.slice(4, 8)}-${hash.slice(8, 12)}-${hash.slice(12, 16)}`;
@@ -205,7 +287,7 @@ function createWindow(port) {
     minHeight: 700,
     title: 'WhatsApp Automation Pro',
     backgroundColor: '#020617',
-    icon: fs.existsSync(path.join(__dirname, 'icon.png')) ? path.join(__dirname, 'icon.png') : undefined,
+    show: false, // Don't show until rendered to prevent white/black flash
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
@@ -216,6 +298,33 @@ function createWindow(port) {
 
   mainWindow.setMenuBarVisibility(false);
   mainWindow.loadURL(`http://localhost:${port}`);
+
+  // Gracefully transition from Splash screen to Main Window
+  mainWindow.once('ready-to-show', () => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.show();
+      mainWindow.focus();
+    }
+    if (splashWindow && !splashWindow.isDestroyed()) {
+      setTimeout(() => {
+        try {
+          splashWindow.close();
+        } catch (e) {}
+      }, 300);
+    }
+  });
+
+  // Fallback in case ready-to-show is delayed
+  mainWindow.webContents.on('did-finish-load', () => {
+    if (mainWindow && !mainWindow.isVisible()) {
+      mainWindow.show();
+    }
+    if (splashWindow && !splashWindow.isDestroyed()) {
+      try {
+        splashWindow.close();
+      } catch (e) {}
+    }
+  });
 
   mainWindow.on('close', (event) => {
     if (app && !app.isQuitting) {
@@ -258,18 +367,30 @@ function createTray() {
 // Lifecycle Events
 if (app) {
   app.whenReady().then(async () => {
+    // 1. Immediately display instant startup splash dialog (0.1s response)
+    createSplashWindow();
+    updateSplashStatus('Initializing local environment...');
+
     registerIpcHandlers();
 
+    // 2. Find open local port
+    updateSplashStatus('Locating available network port...');
     try {
       selectedPort = await findAvailablePort(5000, 5010);
     } catch (err) {
-      console.error('[Electron Main] Port hunting failed, falling back to 5000:', err.message);
       selectedPort = 5000;
     }
 
+    // 3. Start local automation backend server
+    updateSplashStatus('Starting local automation engine...');
     startBackendServer(selectedPort);
-    await checkServerReady(`http://localhost:${selectedPort}/api/anti-ban/health`, 50);
 
+    // 4. Verify server readiness
+    updateSplashStatus('Connecting to automation engine...');
+    await checkServerReady(`http://localhost:${selectedPort}/api/anti-ban/health`, 40);
+
+    // 5. Open workspace window
+    updateSplashStatus('Opening workspace interface...');
     createWindow(selectedPort);
     createTray();
 
@@ -305,5 +426,6 @@ module.exports = {
   startBackendServer,
   registerIpcHandlers,
   createWindow,
+  createSplashWindow,
   createTray
 };

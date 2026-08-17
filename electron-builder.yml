@@ -13,6 +13,7 @@ files:
   - package.json
 asar: true
 asarUnpack:
+  - "backend/**/*"
   - "**/*.node"
 win:
   target:

@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>WhatsApp Automator Pro</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      user-select: none;
+      -webkit-user-select: none;
+      -webkit-app-region: drag;
+    }
+    body {
+      width: 100vw;
+      height: 100vh;
+      background: radial-gradient(circle at 50% 0%, #0f172a, #020617 80%);
+      color: #f8fafc;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      border: 1px solid rgba(16, 185, 129, 0.25);
+      border-radius: 16px;
+      overflow: hidden;
+      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.8), 0 0 40px rgba(16, 185, 129, 0.15);
+    }
+    .logo-container {
+      width: 58px;
+      height: 58px;
+      background: linear-gradient(135deg, #10b981 0%, #0d9488 50%, #047857 100%);
+      border-radius: 16px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 16px;
+      box-shadow: 0 10px 30px rgba(16, 185, 129, 0.35), inset 0 1px 1px rgba(255, 255, 255, 0.4);
+      animation: float 3s ease-in-out infinite;
+    }
+    @keyframes float {
+      0%, 100% { transform: translateY(0px); }
+      50% { transform: translateY(-4px); }
+    }
+    .title {
+      font-size: 17px;
+      font-weight: 800;
+      color: #ffffff;
+      letter-spacing: -0.3px;
+      margin-bottom: 4px;
+    }
+    .subtitle {
+      font-size: 10px;
+      font-weight: 700;
+      color: #34d399;
+      text-transform: uppercase;
+      letter-spacing: 2px;
+      margin-bottom: 22px;
+    }
+    .progress-track {
+      width: 240px;
+      height: 4px;
+      background: rgba(30, 41, 59, 0.8);
+      border-radius: 99px;
+      overflow: hidden;
+      position: relative;
+      margin-bottom: 12px;
+    }
+    .progress-bar {
+      height: 100%;
+      background: linear-gradient(90deg, #059669, #10b981, #34d399);
+      border-radius: 99px;
+      position: absolute;
+      animation: move-bar 1.5s infinite ease-in-out;
+    }
+    @keyframes move-bar {
+      0% { left: -40%; width: 30%; }
+      50% { left: 25%; width: 50%; }
+      100% { left: 100%; width: 30%; }
+    }
+    .status-text {
+      font-size: 11px;
+      color: #94a3b8;
+      font-weight: 500;
+      transition: all 0.2s ease;
+    }
+  </style>
+</head>
+<body>
+  <div class="logo-container">
+    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round">
+      <line x1="22" y1="2" x2="11" y2="13"></line>
+      <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+    </svg>
+  </div>
+  <div class="title">WhatsApp Automator Pro</div>
+  <div class="subtitle">Commercial Desktop Edition</div>
+  <div class="progress-track">
+    <div class="progress-bar"></div>
+  </div>
+  <div class="status-text" id="status">Starting automation engine...</div>
+
+  <script>
+    if (window.electronAPI && window.electronAPI.onStatusUpdate) {
+      window.electronAPI.onStatusUpdate((msg) => {
+        const el = document.getElementById('status');
+        if (el) el.textContent = msg;
+      });
+    }
+  </script>
+</body>
+</html>

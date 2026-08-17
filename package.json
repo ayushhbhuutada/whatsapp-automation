@@ -18,10 +18,23 @@
     "dist": "npm --prefix frontend run build && electron-builder --win nsis"
   },
   "dependencies": {
-    "puppeteer": "^22.15.0",
-    "puppeteer-core": "^22.15.0",
+    "bcryptjs": "^3.0.3",
+    "cors": "^2.8.5",
+    "csv-parser": "^3.0.0",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "express-rate-limit": "^8.6.2",
+    "googleapis": "^144.0.0",
+    "helmet": "^8.3.0",
+    "jsonwebtoken": "^9.0.3",
+    "multer": "^1.4.5-lts.1",
+    "playwright": "^1.44.0",
+    "puppeteer": "^24.1.0",
+    "puppeteer-core": "^24.1.0",
     "qrcode": "^1.5.4",
-    "whatsapp-web.js": "^1.26.0"
+    "razorpay": "^2.9.8",
+    "whatsapp-web.js": "^1.26.0",
+    "xlsx": "^0.18.5"
   },
   "devDependencies": {
     "electron": "30.0.0",
