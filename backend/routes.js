@@ -1957,47 +1957,169 @@ router.post('/admin/licenses/revoke', async (req, res) => {
 });
 
 // ==========================================
-// 9. Automated Self-Serve Checkout & Payment Webhook Endpoints
+// 9. Automated Self-Serve Checkout, Dynamic Store Config & Payment Webhooks
 // ==========================================
 
-const PLAN_CONFIGS = {
-  starter: {
-    name: 'Starter Monthly',
-    priceInPaise: 99900, // ₹999
-    validityDays: 30,
-    sessionsLimit: 1,
-    turboAllowed: false,
-    multiSessionAllowed: false
-  },
-  pro: {
-    name: 'Pro Annual',
-    priceInPaise: 499900, // ₹4,999
-    validityDays: 365,
-    sessionsLimit: 5,
-    turboAllowed: true,
-    multiSessionAllowed: true
-  },
-  agency: {
-    name: 'Agency VIP Lifetime',
-    priceInPaise: 1499900, // ₹14,999
-    validityDays: 3650,
-    sessionsLimit: 20,
-    turboAllowed: true,
-    multiSessionAllowed: true
-  }
+export const DEFAULT_STORE_CONFIG = {
+  brandName: 'WhatsApp Automator Pro',
+  brandTagline: 'Commercial Desktop Automation Suite',
+  supportEmail: 'support@rudraexpression.in',
+  supportWhatsapp: '+919876543210',
+  downloadUrl: 'https://github.com/ayushhbhuutada/whatsapp-automation/releases/latest/download/WhatsAppAutomationSetup.exe',
+  razorpayKeyId: '',
+  razorpayKeySecret: '',
+  plans: [
+    {
+      id: 'starter',
+      name: 'Starter Monthly',
+      price: '₹999',
+      priceInPaise: 99900,
+      period: '/ month',
+      badge: 'Starter',
+      desc: 'Ideal for small businesses starting out with single-account outreach.',
+      validityDays: 30,
+      sessionsLimit: 1,
+      turboAllowed: false,
+      multiSessionAllowed: false,
+      features: [
+        '1 WhatsApp Profile',
+        'Spintax Content Randomizer',
+        'Anti-Ban Daily Warmup Engine',
+        'Excel & Google Sheets Import',
+        'Offline Local Database',
+        'Standard Dispatch Speeds'
+      ]
+    },
+    {
+      id: 'pro',
+      name: 'Pro Growth',
+      price: '₹4,999',
+      priceInPaise: 499900,
+      period: '/ year',
+      badge: '⭐ Most Popular',
+      desc: 'High-speed multi-device automation for power users and growing teams.',
+      validityDays: 365,
+      sessionsLimit: 5,
+      turboAllowed: true,
+      multiSessionAllowed: true,
+      popular: true,
+      features: [
+        '5 WhatsApp Profiles in Parallel',
+        'Multi-Device Auto-Split Load Balancing',
+        '6 Advanced Anti-Ban Systems',
+        'Engagement Circuit Breaker',
+        'Turbo Mode Bypass Control',
+        '1 Year Full Updates & Support'
+      ]
+    },
+    {
+      id: 'agency',
+      name: 'Agency VIP',
+      price: '₹14,999',
+      priceInPaise: 1499900,
+      period: 'Lifetime Access',
+      badge: '👑 Lifetime VIP',
+      desc: 'Enterprise capabilities for agencies handling high-volume client broadcasting.',
+      validityDays: 3650,
+      sessionsLimit: 20,
+      turboAllowed: true,
+      multiSessionAllowed: true,
+      features: [
+        '20 WhatsApp Profiles Concurrently',
+        'Multi-Device Auto-Split Load Balancing',
+        'All 6 Anti-Ban Systems & Fingerprinting',
+        'Unlimited Campaigns & Contacts',
+        'Lifetime Offline Commercial License',
+        'Team Seats & Multi-User Access'
+      ]
+    }
+  ]
 };
+
+export async function getStoreConfig() {
+  try {
+    const { get } = await import('./database.js');
+    const row = await get("SELECT value FROM settings WHERE key = 'store_config'");
+    if (row && row.value) {
+      const parsed = JSON.parse(row.value);
+      return {
+        ...DEFAULT_STORE_CONFIG,
+        ...parsed,
+        plans: Array.isArray(parsed.plans) && parsed.plans.length > 0 ? parsed.plans : DEFAULT_STORE_CONFIG.plans
+      };
+    }
+  } catch (e) {
+    console.warn('Could not load store config from DB:', e.message);
+  }
+  return DEFAULT_STORE_CONFIG;
+}
+
+// Public Store Config (for Landing page & checkout)
+router.get('/config/public', async (_req, res) => {
+  try {
+    const config = await getStoreConfig();
+    res.json({
+      success: true,
+      brandName: config.brandName,
+      brandTagline: config.brandTagline,
+      supportEmail: config.supportEmail,
+      supportWhatsapp: config.supportWhatsapp,
+      downloadUrl: config.downloadUrl,
+      razorpayKeyId: config.razorpayKeyId || process.env.RAZORPAY_KEY_ID || '',
+      plans: config.plans
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Admin Store Config (Full access for settings panel)
+router.get('/admin/config', async (_req, res) => {
+  try {
+    const config = await getStoreConfig();
+    res.json({
+      success: true,
+      config
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Admin Update Store Config (Save modified plans, prices, branding, download links)
+router.post('/admin/config/update', async (req, res) => {
+  try {
+    const { config } = req.body || {};
+    if (!config || typeof config !== 'object') {
+      return res.status(400).json({ success: false, error: 'Valid config object is required.' });
+    }
+
+    const { run } = await import('./database.js');
+    const jsonStr = JSON.stringify(config);
+    await run("INSERT OR REPLACE INTO settings (user_id, key, value) VALUES (1, 'store_config', ?)", [jsonStr]);
+
+    res.json({
+      success: true,
+      message: 'Store & Pricing configuration updated successfully.',
+      config
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
 
 // Create Checkout Order for Commercial License
 router.post('/checkout/create-license-order', async (req, res) => {
   const { planId = 'pro', customerName = '', customerEmail = '', machineId = '*' } = req.body || {};
-  const plan = PLAN_CONFIGS[planId] || PLAN_CONFIGS.pro;
+  const storeConfig = await getStoreConfig();
+  const plan = (storeConfig.plans || []).find(p => p.id === planId) || storeConfig.plans[1] || DEFAULT_STORE_CONFIG.plans[1];
 
   if (!customerEmail) {
     return res.status(400).json({ success: false, error: 'Customer email is required for license delivery.' });
   }
 
   try {
-    const keyId = process.env.RAZORPAY_KEY_ID;
+    const keyId = storeConfig.razorpayKeyId || process.env.RAZORPAY_KEY_ID;
     const isMock = !keyId || keyId === 'rzp_test_mock_key_id' || keyId === 'rzp_test_change_me';
 
     if (isMock) {
@@ -2034,7 +2156,7 @@ router.post('/checkout/create-license-order', async (req, res) => {
       currency: order.currency,
       planId,
       planName: plan.name,
-      key: process.env.RAZORPAY_KEY_ID,
+      key: keyId,
       customer: { name: customerName, email: customerEmail }
     });
   } catch (error) {
@@ -2059,10 +2181,11 @@ router.post('/checkout/verify-license-payment', async (req, res) => {
     return res.status(400).json({ success: false, error: 'Customer email is required.' });
   }
 
-  const plan = PLAN_CONFIGS[planId] || PLAN_CONFIGS.pro;
+  const storeConfig = await getStoreConfig();
+  const plan = (storeConfig.plans || []).find(p => p.id === planId) || storeConfig.plans[1] || DEFAULT_STORE_CONFIG.plans[1];
 
   try {
-    const keySecret = process.env.RAZORPAY_KEY_SECRET;
+    const keySecret = storeConfig.razorpayKeySecret || process.env.RAZORPAY_KEY_SECRET;
     const isMock = !keySecret || keySecret === 'rzp_test_mock_key_secret' || keySecret === 'rzp_secret_change_me';
 
     if (!isMock) {
@@ -2133,7 +2256,7 @@ router.post('/checkout/verify-license-payment', async (req, res) => {
       validityDays: plan.validityDays,
       expiresAt: expiryDate,
       sessionsLimit: plan.sessionsLimit,
-      downloadUrl: 'https://github.com/ayushhbhuutada/whatsapp-automation/releases/latest/download/WhatsAppAutomationSetup.exe'
+      downloadUrl: storeConfig.downloadUrl || DEFAULT_STORE_CONFIG.downloadUrl
     });
   } catch (error) {
     console.error('License payment verification error:', error);
@@ -2150,7 +2273,9 @@ router.post('/webhooks/payment', async (req, res) => {
     const email = payload.email || payload.customer_email || payload.notes?.customerEmail || 'customer@automated.license';
     const name = payload.notes?.customerName || payload.name || 'Automated Customer';
     const planId = payload.notes?.planId || 'pro';
-    const plan = PLAN_CONFIGS[planId] || PLAN_CONFIGS.pro;
+    
+    const storeConfig = await getStoreConfig();
+    const plan = (storeConfig.plans || []).find(p => p.id === planId) || storeConfig.plans[1] || DEFAULT_STORE_CONFIG.plans[1];
 
     const { createLicenseKey } = await import('./utils/licenseGenerator.js');
     const { run } = await import('./database.js');

@@ -11,6 +11,7 @@ import { m3DesktopPackagingSuite } from './m3_desktop_packaging.test.js';
 import { challengerM2EmpiricalSuite } from './m2_challenger_empirical_harness.js';
 import { m2EmpiricalRunnerSuite } from './m2_runner_concurrency_adversarial.test.js';
 import { challengerM4FrontendSuite } from './m4_challenger_frontend_resilience.test.js';
+import { m5StoreConfigSuite } from './m5_store_config.test.js';
 
 async function main() {
   console.log(`\n======================================================`);
@@ -31,7 +32,8 @@ async function main() {
     m2EmpiricalRunnerSuite,
     challengerM3Suite,
     m3DesktopPackagingSuite,
-    challengerM4FrontendSuite
+    challengerM4FrontendSuite,
+    m5StoreConfigSuite
   ];
   const summary = [];
 

@@ -4686,30 +4686,74 @@ function AdminLicenseConsoleView() {
   const [historySearch, setHistorySearch] = useState('');
   const [loadingHistory, setLoadingHistory] = useState(false);
 
-  // Inspector State
-  const [inspectKey, setInspectKey] = useState('');
-  const [inspectResult, setInspectResult] = useState(null);
-  const [inspectError, setInspectError] = useState('');
+  // Store & Pricing Configuration State
+  const [storeConfig, setStoreConfig] = useState({
+    brandName: 'WhatsApp Automator Pro',
+    brandTagline: 'Commercial Desktop Automation Suite',
+    supportEmail: 'support@rudraexpression.in',
+    supportWhatsapp: '+919876543210',
+    downloadUrl: 'https://github.com/ayushhbhuutada/whatsapp-automation/releases/latest/download/WhatsAppAutomationSetup.exe',
+    razorpayKeyId: '',
+    razorpayKeySecret: '',
+    plans: []
+  });
+  const [loadingConfig, setLoadingConfig] = useState(false);
+  const [configSuccessMsg, setConfigSuccessMsg] = useState('');
+  const [configErrorMsg, setConfigErrorMsg] = useState('');
 
-  const fetchHistory = async () => {
+  const fetchStoreConfig = async () => {
     try {
-      setLoadingHistory(true);
-      const res = await axios.get(`${API_BASE}/admin/licenses/history`);
-      if (Array.isArray(res.data?.licenses)) {
-        setLicenses(res.data.licenses);
+      setLoadingConfig(true);
+      const res = await axios.get(`${API_BASE}/admin/config`);
+      if (res.data?.config) {
+        setStoreConfig(res.data.config);
       }
     } catch (e) {
-      console.warn('Failed to load license history:', e.message);
+      console.warn('Failed to load admin config:', e.message);
     } finally {
-      setLoadingHistory(false);
+      setLoadingConfig(false);
     }
   };
 
   useEffect(() => {
-    if (subTab === 'history') {
-      fetchHistory();
+    if (subTab === 'store_config') {
+      fetchStoreConfig();
     }
   }, [subTab]);
+
+  const handleSaveStoreConfig = async (e) => {
+    e.preventDefault();
+    setConfigErrorMsg('');
+    setConfigSuccessMsg('');
+    try {
+      const res = await axios.post(`${API_BASE}/admin/config/update`, { config: storeConfig });
+      if (res.data?.success) {
+        setConfigSuccessMsg('✅ Store settings and pricing plans updated live! Website and checkout are now synced.');
+        setTimeout(() => setConfigSuccessMsg(''), 4000);
+      } else {
+        setConfigErrorMsg(res.data?.error || 'Failed to update settings.');
+      }
+    } catch (err) {
+      setConfigErrorMsg('Update error: ' + (err.response?.data?.error || err.message));
+    }
+  };
+
+  const handlePlanChange = (index, field, value) => {
+    const updatedPlans = [...(storeConfig.plans || [])];
+    if (updatedPlans[index]) {
+      updatedPlans[index] = { ...updatedPlans[index], [field]: value };
+      setStoreConfig({ ...storeConfig, plans: updatedPlans });
+    }
+  };
+
+  const handlePlanFeaturesChange = (index, text) => {
+    const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
+    const updatedPlans = [...(storeConfig.plans || [])];
+    if (updatedPlans[index]) {
+      updatedPlans[index] = { ...updatedPlans[index], features: lines };
+      setStoreConfig({ ...storeConfig, plans: updatedPlans });
+    }
+  };
 
   const handleGenerate = async (e) => {
     e.preventDefault();
@@ -4810,10 +4854,10 @@ function AdminLicenseConsoleView() {
         </div>
 
         {/* Sub-Tab Navigation */}
-        <div className="flex bg-slate-950 p-1 rounded-xl border border-slate-800 text-xs font-semibold">
+        <div className="flex flex-wrap bg-slate-950 p-1 rounded-xl border border-slate-800 text-xs font-semibold gap-1">
           <button
             onClick={() => setSubTab('generator')}
-            className={`px-4 py-2 rounded-lg transition-all flex items-center gap-1.5 ${
+            className={`px-3.5 py-2 rounded-lg transition-all flex items-center gap-1.5 ${
               subTab === 'generator' ? 'bg-emerald-500 text-white shadow-md' : 'text-slate-400 hover:text-white'
             }`}
           >
@@ -4822,7 +4866,7 @@ function AdminLicenseConsoleView() {
           </button>
           <button
             onClick={() => setSubTab('history')}
-            className={`px-4 py-2 rounded-lg transition-all flex items-center gap-1.5 ${
+            className={`px-3.5 py-2 rounded-lg transition-all flex items-center gap-1.5 ${
               subTab === 'history' ? 'bg-emerald-500 text-white shadow-md' : 'text-slate-400 hover:text-white'
             }`}
           >
@@ -4831,12 +4875,21 @@ function AdminLicenseConsoleView() {
           </button>
           <button
             onClick={() => setSubTab('inspector')}
-            className={`px-4 py-2 rounded-lg transition-all flex items-center gap-1.5 ${
+            className={`px-3.5 py-2 rounded-lg transition-all flex items-center gap-1.5 ${
               subTab === 'inspector' ? 'bg-emerald-500 text-white shadow-md' : 'text-slate-400 hover:text-white'
             }`}
           >
             <Search size={14} />
             <span>Inspect / Decode</span>
+          </button>
+          <button
+            onClick={() => setSubTab('store_config')}
+            className={`px-3.5 py-2 rounded-lg transition-all flex items-center gap-1.5 ${
+              subTab === 'store_config' ? 'bg-emerald-500 text-white shadow-md' : 'text-slate-400 hover:text-white'
+            }`}
+          >
+            <Sliders size={14} />
+            <span>Pricing & Store Settings</span>
           </button>
         </div>
       </div>
@@ -5231,6 +5284,272 @@ function AdminLicenseConsoleView() {
           )}
         </div>
       )}
+
+      {/* SUBTAB 4: STORE & PRICING CONFIGURATION HUB */}
+      {subTab === 'store_config' && (
+        <div className="glass-panel rounded-2xl p-6 border border-slate-800 space-y-6 animate-fade-in">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-800">
+            <div>
+              <h3 className="text-base font-bold text-white flex items-center gap-2">
+                <Sliders size={18} className="text-emerald-400" />
+                <span>Store Branding, Live Pricing & Webhook Settings</span>
+              </h3>
+              <p className="text-xs text-slate-400">
+                Modify pricing tiers, feature quotas, support details, and branding. Changes apply immediately to your live website.
+              </p>
+            </div>
+
+            <button
+              onClick={fetchStoreConfig}
+              className="p-2 bg-slate-900 border border-slate-800 hover:bg-slate-800 text-slate-300 rounded-xl flex items-center gap-1.5 text-xs font-semibold w-fit"
+            >
+              <RefreshCw size={14} className={loadingConfig ? 'animate-spin' : ''} />
+              <span>Reload Config</span>
+            </button>
+          </div>
+
+          {configSuccessMsg && (
+            <div className="p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-xl text-emerald-400 text-xs font-medium flex items-center gap-2">
+              <CheckCircle size={16} />
+              <span>{configSuccessMsg}</span>
+            </div>
+          )}
+
+          {configErrorMsg && (
+            <div className="p-3 bg-rose-500/10 border border-rose-500/20 rounded-xl text-rose-400 text-xs font-medium flex items-center gap-2">
+              <AlertTriangle size={16} />
+              <span>{configErrorMsg}</span>
+            </div>
+          )}
+
+          <form onSubmit={handleSaveStoreConfig} className="space-y-8">
+            {/* Section 1: Store Branding & Support Info */}
+            <div className="space-y-4">
+              <h4 className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-2">
+                <Tag size={14} className="text-emerald-400" />
+                <span>1. General Branding & Customer Contacts</span>
+              </h4>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">Product Brand Name</label>
+                  <input
+                    type="text"
+                    required
+                    value={storeConfig.brandName || ''}
+                    onChange={(e) => setStoreConfig({ ...storeConfig, brandName: e.target.value })}
+                    className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-slate-200 text-xs focus:outline-none focus:border-emerald-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">Brand Tagline / Subhead</label>
+                  <input
+                    type="text"
+                    value={storeConfig.brandTagline || ''}
+                    onChange={(e) => setStoreConfig({ ...storeConfig, brandTagline: e.target.value })}
+                    className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-slate-200 text-xs focus:outline-none focus:border-emerald-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">Support Email Address</label>
+                  <input
+                    type="email"
+                    value={storeConfig.supportEmail || ''}
+                    onChange={(e) => setStoreConfig({ ...storeConfig, supportEmail: e.target.value })}
+                    className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-slate-200 text-xs focus:outline-none focus:border-emerald-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">Support WhatsApp Number</label>
+                  <input
+                    type="text"
+                    value={storeConfig.supportWhatsapp || ''}
+                    onChange={(e) => setStoreConfig({ ...storeConfig, supportWhatsapp: e.target.value })}
+                    className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-slate-200 text-xs focus:outline-none focus:border-emerald-500"
+                  />
+                </div>
+
+                <div className="sm:col-span-2">
+                  <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">Windows .EXE Download URL</label>
+                  <input
+                    type="url"
+                    required
+                    value={storeConfig.downloadUrl || ''}
+                    onChange={(e) => setStoreConfig({ ...storeConfig, downloadUrl: e.target.value })}
+                    className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-slate-200 text-xs focus:outline-none focus:border-emerald-500 font-mono text-[11px]"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Section 2: Payment Gateway Credentials */}
+            <div className="space-y-4 pt-4 border-t border-slate-800">
+              <h4 className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-2">
+                <Lock size={14} className="text-amber-400" />
+                <span>2. Payment Gateway Credentials (Razorpay)</span>
+              </h4>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">Razorpay Key ID</label>
+                  <input
+                    type="text"
+                    placeholder="rzp_live_... (leave empty for test mock mode)"
+                    value={storeConfig.razorpayKeyId || ''}
+                    onChange={(e) => setStoreConfig({ ...storeConfig, razorpayKeyId: e.target.value })}
+                    className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-slate-200 text-xs focus:outline-none focus:border-emerald-500 font-mono"
+                  />
+                  <p className="text-[10px] text-slate-500 mt-1">If blank, checkout runs in Instant Test Mode.</p>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">Razorpay Key Secret</label>
+                  <input
+                    type="password"
+                    placeholder="••••••••••••••••"
+                    value={storeConfig.razorpayKeySecret || ''}
+                    onChange={(e) => setStoreConfig({ ...storeConfig, razorpayKeySecret: e.target.value })}
+                    className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-slate-200 text-xs focus:outline-none focus:border-emerald-500 font-mono"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Section 3: Live Pricing & Tier Editor */}
+            <div className="space-y-4 pt-4 border-t border-slate-800">
+              <h4 className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-2">
+                <Zap size={14} className="text-emerald-400" />
+                <span>3. Commercial Pricing Plans & Feature Limits</span>
+              </h4>
+
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                {(storeConfig.plans || []).map((plan, idx) => (
+                  <div key={plan.id || idx} className="p-5 bg-slate-950 border border-slate-800 rounded-2xl space-y-4">
+                    <div className="flex justify-between items-center pb-2 border-b border-slate-800">
+                      <span className="font-bold text-white text-sm">{plan.name}</span>
+                      <span className="text-[10px] font-mono uppercase bg-emerald-500/10 text-emerald-400 px-2 py-0.5 rounded border border-emerald-500/20">
+                        {plan.id}
+                      </span>
+                    </div>
+
+                    <div className="space-y-3 text-xs">
+                      <div>
+                        <label className="block text-[10px] font-semibold text-slate-500 uppercase mb-1">Plan Title</label>
+                        <input
+                          type="text"
+                          value={plan.name || ''}
+                          onChange={(e) => handlePlanChange(idx, 'name', e.target.value)}
+                          className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-lg text-slate-200 text-xs"
+                        />
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <label className="block text-[10px] font-semibold text-slate-500 uppercase mb-1">Display Price</label>
+                          <input
+                            type="text"
+                            placeholder="₹4,999"
+                            value={plan.price || ''}
+                            onChange={(e) => handlePlanChange(idx, 'price', e.target.value)}
+                            className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-lg text-emerald-300 font-bold text-xs"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[10px] font-semibold text-slate-500 uppercase mb-1">Price in Paise</label>
+                          <input
+                            type="number"
+                            placeholder="499900"
+                            value={plan.priceInPaise || ''}
+                            onChange={(e) => handlePlanChange(idx, 'priceInPaise', parseInt(e.target.value) || 0)}
+                            className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-lg text-slate-200 text-xs font-mono"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <label className="block text-[10px] font-semibold text-slate-500 uppercase mb-1">Validity (Days)</label>
+                          <input
+                            type="number"
+                            value={plan.validityDays || 30}
+                            onChange={(e) => handlePlanChange(idx, 'validityDays', parseInt(e.target.value) || 30)}
+                            className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-lg text-slate-200 text-xs font-mono"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[10px] font-semibold text-slate-500 uppercase mb-1">Profiles Quota</label>
+                          <input
+                            type="number"
+                            value={plan.sessionsLimit || 1}
+                            onChange={(e) => handlePlanChange(idx, 'sessionsLimit', parseInt(e.target.value) || 1)}
+                            className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-lg text-slate-200 text-xs font-mono"
+                          />
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-[10px] font-semibold text-slate-500 uppercase mb-1">Badge Tag</label>
+                        <input
+                          type="text"
+                          placeholder="⭐ Most Popular"
+                          value={plan.badge || ''}
+                          onChange={(e) => handlePlanChange(idx, 'badge', e.target.value)}
+                          className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-lg text-slate-200 text-xs"
+                        />
+                      </div>
+
+                      <div className="flex items-center gap-4 pt-1">
+                        <label className="flex items-center gap-1.5 cursor-pointer text-slate-300 text-[11px]">
+                          <input
+                            type="checkbox"
+                            checked={Boolean(plan.turboAllowed)}
+                            onChange={(e) => handlePlanChange(idx, 'turboAllowed', e.target.checked)}
+                            className="rounded text-emerald-500"
+                          />
+                          <span>Turbo Mode</span>
+                        </label>
+                        <label className="flex items-center gap-1.5 cursor-pointer text-slate-300 text-[11px]">
+                          <input
+                            type="checkbox"
+                            checked={Boolean(plan.multiSessionAllowed)}
+                            onChange={(e) => handlePlanChange(idx, 'multiSessionAllowed', e.target.checked)}
+                            className="rounded text-emerald-500"
+                          />
+                          <span>Multi-Device</span>
+                        </label>
+                      </div>
+
+                      <div>
+                        <label className="block text-[10px] font-semibold text-slate-500 uppercase mb-1">Feature Bullets (1 per line)</label>
+                        <textarea
+                          rows={4}
+                          value={(plan.features || []).join('\n')}
+                          onChange={(e) => handlePlanFeaturesChange(idx, e.target.value)}
+                          className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-lg text-slate-300 text-xs leading-relaxed"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Save Button */}
+            <div className="pt-4 border-t border-slate-800 flex justify-end">
+              <button
+                type="submit"
+                className="px-8 py-3.5 bg-emerald-500 hover:bg-emerald-600 font-bold text-white rounded-xl shadow-lg shadow-emerald-500/20 transition-all text-sm flex items-center gap-2"
+              >
+                <CheckCircle size={18} />
+                <span>💾 Save Store & Pricing Configuration</span>
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
     </div>
   );
 }
@@ -5248,6 +5567,8 @@ function PricingView({ onActivate }) {
   const [errorMsg, setErrorMsg] = useState('');
   const [copiedKey, setCopiedKey] = useState(false);
 
+  const [plans, setPlans] = useState([]);
+
   useEffect(() => {
     // Attempt to auto-fill local machine id if available
     axios.get(`${API_BASE}/license/machine-id`)
@@ -5255,62 +5576,17 @@ function PricingView({ onActivate }) {
         if (res.data?.machineId) setMachineId(res.data.machineId);
       })
       .catch(() => {});
-  }, []);
 
-  const plans = [
-    {
-      id: 'starter',
-      name: 'Starter Monthly',
-      price: '₹999',
-      period: '/ month',
-      badge: 'Starter',
-      desc: 'Ideal for small businesses starting out with single-account outreach.',
-      features: [
-        '1 WhatsApp Profile',
-        'Spintax Content Randomizer',
-        'Anti-Ban Daily Warmup Engine',
-        'Excel & Google Sheets Import',
-        'Offline Local Database',
-        'Standard Dispatch Speeds'
-      ],
-      color: 'slate'
-    },
-    {
-      id: 'pro',
-      name: 'Pro Growth',
-      price: '₹4,999',
-      period: '/ year',
-      badge: '⭐ Most Popular',
-      desc: 'High-speed multi-device automation for power users and growing teams.',
-      features: [
-        '5 WhatsApp Profiles in Parallel',
-        'Multi-Device Auto-Split Load Balancing',
-        '6 Advanced Anti-Ban Systems',
-        'Engagement Circuit Breaker',
-        'Turbo Mode Bypass Control',
-        '1 Year Full Updates & Support'
-      ],
-      popular: true,
-      color: 'emerald'
-    },
-    {
-      id: 'agency',
-      name: 'Agency VIP',
-      price: '₹14,999',
-      period: 'Lifetime Access',
-      badge: '👑 Lifetime VIP',
-      desc: 'Enterprise capabilities for agencies handling high-volume client broadcasting.',
-      features: [
-        '20 WhatsApp Profiles Concurrently',
-        'Multi-Device Auto-Split Load Balancing',
-        'All 6 Anti-Ban Systems & Fingerprinting',
-        'Unlimited Campaigns & Contacts',
-        'Lifetime Offline Commercial License',
-        'Team Seats & Multi-User Access'
-      ],
-      color: 'purple'
-    }
-  ];
+    // Fetch dynamic store config / plans
+    axios.get(`${API_BASE}/config/public`)
+      .then(res => {
+        if (Array.isArray(res.data?.plans) && res.data.plans.length > 0) {
+          setPlans(res.data.plans);
+          setSelectedPlan(res.data.plans[0].id);
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   const handleCheckout = async (e) => {
     e.preventDefault();
@@ -5430,108 +5706,139 @@ function PricingView({ onActivate }) {
                 type="text"
                 readOnly
                 value={orderResult.licenseKey}
-                className="flex-1 px-3.5 py-2.5 bg-slate-900 border border-slate-800 rounded-lg text-emerald-300 font-mono text-xs select-all focus:outline-none"
+                className="flex-1 px-3 py-2 bg-slate-900 border border-slate-800 rounded-lg text-emerald-300 font-mono text-xs select-all focus:outline-none"
               />
               <button
                 onClick={() => copyKey(orderResult.licenseKey)}
-                className="px-4 py-2.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-lg text-xs font-bold transition-colors flex items-center gap-1.5 shrink-0 shadow-md"
+                className="px-3.5 py-2 bg-emerald-500 hover:bg-emerald-600 text-white font-bold rounded-lg text-xs transition-colors flex items-center gap-1 shrink-0"
               >
                 {copiedKey ? <Check size={14} /> : <Copy size={14} />}
-                <span>{copiedKey ? 'Copied Key!' : 'Copy Key'}</span>
+                <span>{copiedKey ? 'Copied!' : 'Copy Key'}</span>
               </button>
             </div>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs text-slate-300 bg-slate-950/60 p-4 rounded-xl border border-slate-800">
-            <div><span className="text-slate-500">Plan:</span> <strong className="text-white block">{orderResult.planName}</strong></div>
-            <div><span className="text-slate-500">Issued To:</span> <span className="text-slate-200 block">{orderResult.customerEmail}</span></div>
-            <div><span className="text-slate-500">Profiles Quota:</span> <span className="text-emerald-400 font-bold block">{orderResult.sessionsLimit} WhatsApp Accounts</span></div>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+            <div className="p-3 bg-slate-950/80 rounded-xl border border-slate-800">
+              <span className="text-slate-500 block text-[10px] uppercase">Plan</span>
+              <strong className="text-white">{orderResult.planName}</strong>
+            </div>
+            <div className="p-3 bg-slate-950/80 rounded-xl border border-slate-800">
+              <span className="text-slate-500 block text-[10px] uppercase">Validity</span>
+              <strong className="text-emerald-400">{orderResult.validityDays} Days</strong>
+            </div>
+            <div className="p-3 bg-slate-950/80 rounded-xl border border-slate-800">
+              <span className="text-slate-500 block text-[10px] uppercase">Accounts Allowed</span>
+              <strong className="text-white">{orderResult.sessionsLimit} Sessions</strong>
+            </div>
+            <div className="p-3 bg-slate-950/80 rounded-xl border border-slate-800">
+              <span className="text-slate-500 block text-[10px] uppercase">Machine Lock</span>
+              <strong className="text-amber-400 font-mono">{orderResult.machineId === '*' ? 'Auto-Locks on First Launch' : 'Bound'}</strong>
+            </div>
           </div>
 
-          <div className="flex flex-col sm:flex-row gap-3 pt-2">
+          <div className="p-4 bg-slate-900/60 rounded-xl border border-slate-800/80 space-y-3">
+            <h4 className="text-xs font-bold text-white flex items-center gap-1.5">
+              <Sparkles size={14} className="text-emerald-400" />
+              <span>Next Steps to Start Outreach:</span>
+            </h4>
+            <ol className="text-xs text-slate-300 space-y-1.5 list-decimal list-inside">
+              <li>Download and install the Windows Desktop application below.</li>
+              <li>Launch the app and paste your license key on the product activation screen.</li>
+              <li>Scan your WhatsApp QR code and start sending campaigns safely!</li>
+            </ol>
+
             <a
-              href="https://github.com/ayushhbhuutada/whatsapp-automation/releases/latest/download/WhatsAppAutomationSetup.exe"
-              target="_blank"
-              rel="noreferrer"
-              className="flex-1 py-3 px-4 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/20 text-center"
+              href={orderResult.downloadUrl || 'https://github.com/ayushhbhuutada/whatsapp-automation/releases/latest/download/WhatsAppAutomationSetup.exe'}
+              className="inline-flex items-center gap-2 px-5 py-2.5 bg-emerald-500 hover:bg-emerald-600 font-bold text-white text-xs rounded-xl shadow-lg shadow-emerald-500/20 transition-all mt-2"
             >
-              <span>📥 Download Windows App (.exe)</span>
+              <Download size={14} />
+              <span>Download WhatsAppAutomationSetup.exe</span>
             </a>
-            <button
-              onClick={() => setOrderResult(null)}
-              className="py-3 px-6 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl text-xs font-bold transition-colors"
-            >
-              Dismiss
-            </button>
           </div>
         </div>
       )}
 
-      {/* 3 Pricing Cards Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        {plans.map((plan) => (
-          <div
-            key={plan.id}
-            onClick={() => setSelectedPlan(plan.id)}
-            className={`glass-panel rounded-2xl p-7 border transition-all cursor-pointer relative flex flex-col justify-between ${
-              selectedPlan === plan.id
-                ? 'border-emerald-500 bg-slate-900/90 shadow-2xl shadow-emerald-500/10 ring-1 ring-emerald-500/50'
-                : 'border-slate-800 hover:border-slate-700 bg-slate-900/40'
-            }`}
-          >
-            {plan.popular && (
-              <span className="absolute -top-3 left-1/2 -translate-x-1/2 bg-emerald-500 text-slate-950 font-extrabold text-[10px] uppercase tracking-wider px-3 py-0.5 rounded-full shadow">
-                Most Popular
-              </span>
-            )}
-
-            <div className="space-y-4">
-              <div className="flex justify-between items-start">
-                <div>
-                  <h3 className="text-lg font-bold text-white">{plan.name}</h3>
-                  <p className="text-xs text-slate-400 mt-1">{plan.desc}</p>
+      {/* Pricing Cards Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-8 items-stretch">
+        {(plans || []).map((plan) => {
+          const isSelected = selectedPlan === plan.id;
+          return (
+            <div
+              key={plan.id}
+              onClick={() => setSelectedPlan(plan.id)}
+              className={`glass-panel rounded-2xl p-6 border transition-all flex flex-col justify-between cursor-pointer relative ${
+                isSelected
+                  ? 'border-emerald-500 shadow-xl shadow-emerald-500/10 bg-slate-900/90'
+                  : 'border-slate-800/80 hover:border-slate-700 bg-slate-900/40'
+              }`}
+            >
+              {plan.popular && (
+                <div className="absolute -top-3 left-1/2 -translate-x-1/2 px-3 py-1 bg-gradient-to-r from-emerald-500 to-teal-500 text-white font-extrabold text-[10px] tracking-wider uppercase rounded-full shadow-lg">
+                  {plan.badge || '⭐ Most Popular'}
                 </div>
+              )}
+
+              <div className="space-y-4">
+                <div className="flex justify-between items-start">
+                  <div>
+                    <h3 className="font-heading text-lg font-bold text-white">{plan.name}</h3>
+                    <p className="text-xs text-slate-400 mt-1">{plan.desc}</p>
+                  </div>
+                  {!plan.popular && plan.badge && (
+                    <span className="px-2 py-0.5 bg-slate-800 text-slate-300 text-[10px] font-bold rounded">
+                      {plan.badge}
+                    </span>
+                  )}
+                </div>
+
+                <div className="pt-2 border-t border-slate-800/80">
+                  <div className="flex items-baseline gap-1">
+                    <span className="text-3xl font-heading font-extrabold text-white">{plan.price}</span>
+                    <span className="text-xs text-slate-400 font-medium">{plan.period || ''}</span>
+                  </div>
+                </div>
+
+                <ul className="space-y-2.5 pt-2 text-xs text-slate-300 border-t border-slate-800/60">
+                  {(plan.features || []).map((feat, idx) => (
+                    <li key={idx} className="flex items-start gap-2">
+                      <CheckCircle size={14} className="text-emerald-400 shrink-0 mt-0.5" />
+                      <span>{feat}</span>
+                    </li>
+                  ))}
+                </ul>
               </div>
 
-              <div className="flex items-baseline gap-1.5 pt-2 border-t border-slate-800">
-                <span className="text-3xl font-heading font-extrabold text-white">{plan.price}</span>
-                <span className="text-xs text-slate-400">{plan.period}</span>
+              <div className="pt-6">
+                <button
+                  type="button"
+                  onClick={() => setSelectedPlan(plan.id)}
+                  className={`w-full py-2.5 rounded-xl font-bold text-xs transition-all flex items-center justify-center gap-1.5 ${
+                    isSelected
+                      ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/20'
+                      : 'bg-slate-800 hover:bg-slate-700 text-slate-200'
+                  }`}
+                >
+                  <Zap size={14} />
+                  <span>{isSelected ? 'Selected Plan' : 'Select Plan'}</span>
+                </button>
               </div>
-
-              {/* Feature Bullet List */}
-              <ul className="space-y-2.5 pt-4 text-xs text-slate-300">
-                {plan.features.map((feat, i) => (
-                  <li key={i} className="flex items-center gap-2.5">
-                    <CheckCircle size={15} className="text-emerald-400 shrink-0" />
-                    <span>{feat}</span>
-                  </li>
-                ))}
-              </ul>
             </div>
-
-            <div className="pt-8">
-              <button
-                type="button"
-                className={`w-full py-3 rounded-xl text-xs font-bold transition-all ${
-                  selectedPlan === plan.id
-                    ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/20'
-                    : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
-                }`}
-              >
-                {selectedPlan === plan.id ? '✓ Selected Plan' : 'Choose Plan'}
-              </button>
-            </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
 
-      {/* Checkout Form Card */}
-      <div className="glass-panel rounded-2xl p-8 border border-slate-800 max-w-xl mx-auto space-y-6">
+      {/* Checkout Form Box */}
+      <div className="glass-panel max-w-xl mx-auto rounded-2xl p-6 sm:p-8 border border-slate-800 space-y-6">
         <div className="flex items-center gap-3 pb-4 border-b border-slate-800">
-          <Zap size={20} className="text-emerald-400" />
+          <div className="w-10 h-10 rounded-xl bg-emerald-500/15 text-emerald-400 flex items-center justify-center border border-emerald-500/20">
+            <Lock size={18} />
+          </div>
           <div>
-            <h3 className="text-base font-bold text-white">Complete Your Order & Instant Delivery</h3>
-            <p className="text-xs text-slate-400">Selected: <strong className="text-emerald-400">{plans.find(p => p.id === selectedPlan)?.name}</strong></p>
+            <h3 className="font-heading font-bold text-white text-base">Instant License Checkout</h3>
+            <p className="text-xs text-slate-400">
+              Selected: <strong className="text-emerald-400">{(plans || []).find(p => p.id === selectedPlan)?.name}</strong> ({(plans || []).find(p => p.id === selectedPlan)?.price})
+            </p>
           </div>
         </div>
 
@@ -5586,7 +5893,7 @@ function PricingView({ onActivate }) {
             className="w-full py-3.5 bg-emerald-500 hover:bg-emerald-600 font-bold text-white rounded-xl shadow-lg shadow-emerald-500/20 transition-all text-sm flex items-center justify-center gap-2 disabled:opacity-50 mt-2"
           >
             <ShieldCheck size={18} />
-            <span>{loading ? 'Processing Payment...' : `⚡ Pay ${plans.find(p => p.id === selectedPlan)?.price} & Get Instant License`}</span>
+            <span>{loading ? 'Processing Payment...' : `⚡ Pay ${(plans || []).find(p => p.id === selectedPlan)?.price} & Get Instant License`}</span>
           </button>
         </form>
       </div>
@@ -5606,7 +5913,25 @@ function PublicLandingView({
   adminError,
   onAdminLogin
 }) {
-  const downloadUrl = "https://github.com/ayushhbhuutada/whatsapp-automation/releases/latest/download/WhatsAppAutomationSetup.exe";
+  const [publicConfig, setPublicConfig] = useState({
+    brandName: 'WhatsApp Automator Pro',
+    brandTagline: 'Commercial Desktop Edition',
+    downloadUrl: 'https://github.com/ayushhbhuutada/whatsapp-automation/releases/latest/download/WhatsAppAutomationSetup.exe',
+    supportEmail: 'support@rudraexpression.in',
+    supportWhatsapp: '+919876543210'
+  });
+
+  useEffect(() => {
+    axios.get(`${API_BASE}/config/public`)
+      .then(res => {
+        if (res.data?.success) {
+          setPublicConfig(prev => ({ ...prev, ...res.data }));
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  const downloadUrl = publicConfig.downloadUrl || "https://github.com/ayushhbhuutada/whatsapp-automation/releases/latest/download/WhatsAppAutomationSetup.exe";
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col selection:bg-emerald-500 selection:text-slate-950">
@@ -5619,10 +5944,10 @@ function PublicLandingView({
             </div>
             <div>
               <span className="font-heading text-base font-extrabold tracking-tight text-white block leading-tight">
-                WhatsApp Automator Pro
+                {publicConfig.brandName || 'WhatsApp Automator Pro'}
               </span>
               <span className="text-[10px] text-emerald-400 font-semibold tracking-widest uppercase">
-                Commercial Desktop Edition
+                {publicConfig.brandTagline || 'Commercial Desktop Edition'}
               </span>
             </div>
           </div>
@@ -5896,9 +6221,12 @@ function PublicLandingView({
           <div className="w-6 h-6 bg-emerald-500 rounded-lg flex items-center justify-center text-white">
             <Send size={14} className="rotate-45" />
           </div>
-          <span className="font-bold text-slate-300">WhatsApp Automator Pro</span>
+          <span className="font-bold text-slate-300">{publicConfig.brandName || 'WhatsApp Automator Pro'}</span>
         </div>
-        <p>© {new Date().getFullYear()} WhatsApp Automator Pro. All rights reserved. Commercial Desktop Edition.</p>
+        <p>© {new Date().getFullYear()} {publicConfig.brandName || 'WhatsApp Automator Pro'}. All rights reserved. {publicConfig.brandTagline || 'Commercial Desktop Edition'}.</p>
+        {publicConfig.supportEmail && (
+          <p className="text-[11px] text-slate-600">Support: <a href={`mailto:${publicConfig.supportEmail}`} className="text-slate-400 hover:text-emerald-400">{publicConfig.supportEmail}</a> {publicConfig.supportWhatsapp ? `| WhatsApp: ${publicConfig.supportWhatsapp}` : ''}</p>
+        )}
       </footer>
     </div>
   );
