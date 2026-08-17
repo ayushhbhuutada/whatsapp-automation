@@ -647,6 +647,17 @@ export default function App() {
               Team & Seats
             </button>
             <button 
+              onClick={() => setActiveTab('pricing')}
+              className={`sidebar-link ${activeTab === 'pricing' ? 'active' : ''} w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 text-sm font-medium ${
+                activeTab === 'pricing' 
+                  ? 'bg-slate-800 text-emerald-400 border border-slate-700/50' 
+                  : 'text-slate-400 hover:bg-slate-900/50 hover:text-slate-200'
+              }`}
+            >
+              <Zap size={18} />
+              Pricing & Buy
+            </button>
+            <button 
               onClick={() => setActiveTab('admin_licenses')}
               className={`sidebar-link ${activeTab === 'admin_licenses' ? 'active' : ''} w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 text-sm font-medium ${
                 activeTab === 'admin_licenses' 
@@ -887,6 +898,12 @@ export default function App() {
 
           {activeTab === 'saas' && (
             <TeamManagementView />
+          )}
+
+          {activeTab === 'pricing' && (
+            <PricingView onActivate={(key) => {
+              setActiveTab('settings');
+            }} />
           )}
 
           {activeTab === 'admin_licenses' && (
@@ -5125,6 +5142,365 @@ function AdminLicenseConsoleView() {
           )}
         </div>
       )}
+    </div>
+  );
+}
+
+// ============================================================================
+// VIEW COMPONENT 10: SELF-SERVE PRICING & INSTANT LICENSE CHECKOUT
+// ============================================================================
+function PricingView({ onActivate }) {
+  const [selectedPlan, setSelectedPlan] = useState('pro');
+  const [customerName, setCustomerName] = useState('');
+  const [customerEmail, setCustomerEmail] = useState('');
+  const [machineId, setMachineId] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [orderResult, setOrderResult] = useState(null);
+  const [errorMsg, setErrorMsg] = useState('');
+  const [copiedKey, setCopiedKey] = useState(false);
+
+  useEffect(() => {
+    // Attempt to auto-fill local machine id if available
+    axios.get(`${API_BASE}/license/machine-id`)
+      .then(res => {
+        if (res.data?.machineId) setMachineId(res.data.machineId);
+      })
+      .catch(() => {});
+  }, []);
+
+  const plans = [
+    {
+      id: 'starter',
+      name: 'Starter Monthly',
+      price: '₹999',
+      period: '/ month',
+      badge: 'Starter',
+      desc: 'Ideal for small businesses starting out with single-account outreach.',
+      features: [
+        '1 WhatsApp Profile',
+        'Spintax Content Randomizer',
+        'Anti-Ban Daily Warmup Engine',
+        'Excel & Google Sheets Import',
+        'Offline Local Database',
+        'Standard Dispatch Speeds'
+      ],
+      color: 'slate'
+    },
+    {
+      id: 'pro',
+      name: 'Pro Growth',
+      price: '₹4,999',
+      period: '/ year',
+      badge: '⭐ Most Popular',
+      desc: 'High-speed multi-device automation for power users and growing teams.',
+      features: [
+        '5 WhatsApp Profiles in Parallel',
+        'Multi-Device Auto-Split Load Balancing',
+        '6 Advanced Anti-Ban Systems',
+        'Engagement Circuit Breaker',
+        'Turbo Mode Bypass Control',
+        '1 Year Full Updates & Support'
+      ],
+      popular: true,
+      color: 'emerald'
+    },
+    {
+      id: 'agency',
+      name: 'Agency VIP',
+      price: '₹14,999',
+      period: 'Lifetime Access',
+      badge: '👑 Lifetime VIP',
+      desc: 'Enterprise capabilities for agencies handling high-volume client broadcasting.',
+      features: [
+        '20 WhatsApp Profiles Concurrently',
+        'Multi-Device Auto-Split Load Balancing',
+        'All 6 Anti-Ban Systems & Fingerprinting',
+        'Unlimited Campaigns & Contacts',
+        'Lifetime Offline Commercial License',
+        'Team Seats & Multi-User Access'
+      ],
+      color: 'purple'
+    }
+  ];
+
+  const handleCheckout = async (e) => {
+    e.preventDefault();
+    if (!customerEmail.trim()) {
+      setErrorMsg('Please enter your email for license delivery.');
+      return;
+    }
+    setErrorMsg('');
+    setLoading(true);
+
+    try {
+      // 1. Create order
+      const orderRes = await axios.post(`${API_BASE}/checkout/create-license-order`, {
+        planId: selectedPlan,
+        customerName: customerName.trim() || 'Customer',
+        customerEmail: customerEmail.trim(),
+        machineId: machineId.trim() || '*'
+      });
+
+      const orderData = orderRes.data;
+
+      // 2. Handle Razorpay or Mock checkout
+      if (orderData.mock || !window.Razorpay) {
+        // Direct instant verification for mock / test checkout
+        const verifyRes = await axios.post(`${API_BASE}/checkout/verify-license-payment`, {
+          razorpay_order_id: orderData.orderId,
+          razorpay_payment_id: `pay_${Date.now()}`,
+          razorpay_signature: 'mock_valid_signature',
+          planId: selectedPlan,
+          customerName: customerName.trim() || 'Customer',
+          customerEmail: customerEmail.trim(),
+          machineId: machineId.trim() || '*'
+        });
+
+        setOrderResult(verifyRes.data);
+      } else {
+        const options = {
+          key: orderData.key,
+          amount: orderData.amount,
+          currency: orderData.currency,
+          name: 'WhatsApp Automator Pro',
+          description: `${orderData.planName} Commercial License`,
+          order_id: orderData.orderId,
+          prefill: {
+            name: customerName,
+            email: customerEmail
+          },
+          theme: { color: '#10b981' },
+          handler: async function (response) {
+            try {
+              const verifyRes = await axios.post(`${API_BASE}/checkout/verify-license-payment`, {
+                razorpay_order_id: response.razorpay_order_id,
+                razorpay_payment_id: response.razorpay_payment_id,
+                razorpay_signature: response.razorpay_signature,
+                planId: selectedPlan,
+                customerName: customerName.trim() || 'Customer',
+                customerEmail: customerEmail.trim(),
+                machineId: machineId.trim() || '*'
+              });
+              setOrderResult(verifyRes.data);
+            } catch (err) {
+              setErrorMsg('Payment verification error: ' + (err.response?.data?.error || err.message));
+            }
+          }
+        };
+        const rzp = new window.Razorpay(options);
+        rzp.open();
+      }
+    } catch (err) {
+      setErrorMsg(err.response?.data?.error || 'Checkout initiation failed: ' + err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const copyKey = (key) => {
+    navigator.clipboard.writeText(key);
+    setCopiedKey(true);
+    setTimeout(() => setCopiedKey(false), 2000);
+  };
+
+  return (
+    <div className="space-y-10 max-w-6xl">
+      {/* Hero Header */}
+      <div className="text-center space-y-3">
+        <span className="text-xs font-bold uppercase tracking-widest text-emerald-400 bg-emerald-500/10 px-3 py-1 rounded-full border border-emerald-500/20">
+          Commercial Software Licensing
+        </span>
+        <h2 className="text-3xl font-heading font-extrabold text-white tracking-tight">
+          Simple, Transparent Pricing
+        </h2>
+        <p className="text-sm text-slate-400 max-w-lg mx-auto">
+          Instant license key delivery with first-use hardware auto-locking. Download the Windows desktop app and automate in minutes.
+        </p>
+      </div>
+
+      {/* SUCCESS MODAL ON PURCHASE */}
+      {orderResult && (
+        <div className="glass-panel rounded-2xl p-8 border border-emerald-500/40 bg-emerald-950/20 space-y-6 animate-fade-in shadow-2xl">
+          <div className="flex items-center gap-3 text-emerald-400">
+            <div className="w-12 h-12 rounded-2xl bg-emerald-500 flex items-center justify-center text-white shadow-lg shadow-emerald-500/30">
+              <CheckCircle size={26} />
+            </div>
+            <div>
+              <h3 className="text-xl font-bold text-white">Payment Successful & License Issued!</h3>
+              <p className="text-xs text-slate-300">Your commercial license has been generated and is ready to use.</p>
+            </div>
+          </div>
+
+          <div className="p-4 bg-slate-950 border border-slate-800 rounded-xl space-y-2">
+            <div className="flex justify-between items-center">
+              <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Your Commercial License Key</span>
+              <span className="text-[10px] text-emerald-400 font-mono">Ed25519 Signed</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <input
+                type="text"
+                readOnly
+                value={orderResult.licenseKey}
+                className="flex-1 px-3.5 py-2.5 bg-slate-900 border border-slate-800 rounded-lg text-emerald-300 font-mono text-xs select-all focus:outline-none"
+              />
+              <button
+                onClick={() => copyKey(orderResult.licenseKey)}
+                className="px-4 py-2.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-lg text-xs font-bold transition-colors flex items-center gap-1.5 shrink-0 shadow-md"
+              >
+                {copiedKey ? <Check size={14} /> : <Copy size={14} />}
+                <span>{copiedKey ? 'Copied Key!' : 'Copy Key'}</span>
+              </button>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs text-slate-300 bg-slate-950/60 p-4 rounded-xl border border-slate-800">
+            <div><span className="text-slate-500">Plan:</span> <strong className="text-white block">{orderResult.planName}</strong></div>
+            <div><span className="text-slate-500">Issued To:</span> <span className="text-slate-200 block">{orderResult.customerEmail}</span></div>
+            <div><span className="text-slate-500">Profiles Quota:</span> <span className="text-emerald-400 font-bold block">{orderResult.sessionsLimit} WhatsApp Accounts</span></div>
+          </div>
+
+          <div className="flex flex-col sm:flex-row gap-3 pt-2">
+            <a
+              href="https://github.com/ayushhbhuutada/whatsapp-automation/releases/latest/download/WhatsAppAutomationSetup.exe"
+              target="_blank"
+              rel="noreferrer"
+              className="flex-1 py-3 px-4 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/20 text-center"
+            >
+              <span>📥 Download Windows App (.exe)</span>
+            </a>
+            <button
+              onClick={() => setOrderResult(null)}
+              className="py-3 px-6 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl text-xs font-bold transition-colors"
+            >
+              Dismiss
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* 3 Pricing Cards Grid */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        {plans.map((plan) => (
+          <div
+            key={plan.id}
+            onClick={() => setSelectedPlan(plan.id)}
+            className={`glass-panel rounded-2xl p-7 border transition-all cursor-pointer relative flex flex-col justify-between ${
+              selectedPlan === plan.id
+                ? 'border-emerald-500 bg-slate-900/90 shadow-2xl shadow-emerald-500/10 ring-1 ring-emerald-500/50'
+                : 'border-slate-800 hover:border-slate-700 bg-slate-900/40'
+            }`}
+          >
+            {plan.popular && (
+              <span className="absolute -top-3 left-1/2 -translate-x-1/2 bg-emerald-500 text-slate-950 font-extrabold text-[10px] uppercase tracking-wider px-3 py-0.5 rounded-full shadow">
+                Most Popular
+              </span>
+            )}
+
+            <div className="space-y-4">
+              <div className="flex justify-between items-start">
+                <div>
+                  <h3 className="text-lg font-bold text-white">{plan.name}</h3>
+                  <p className="text-xs text-slate-400 mt-1">{plan.desc}</p>
+                </div>
+              </div>
+
+              <div className="flex items-baseline gap-1.5 pt-2 border-t border-slate-800">
+                <span className="text-3xl font-heading font-extrabold text-white">{plan.price}</span>
+                <span className="text-xs text-slate-400">{plan.period}</span>
+              </div>
+
+              {/* Feature Bullet List */}
+              <ul className="space-y-2.5 pt-4 text-xs text-slate-300">
+                {plan.features.map((feat, i) => (
+                  <li key={i} className="flex items-center gap-2.5">
+                    <CheckCircle size={15} className="text-emerald-400 shrink-0" />
+                    <span>{feat}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+
+            <div className="pt-8">
+              <button
+                type="button"
+                className={`w-full py-3 rounded-xl text-xs font-bold transition-all ${
+                  selectedPlan === plan.id
+                    ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/20'
+                    : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+                }`}
+              >
+                {selectedPlan === plan.id ? '✓ Selected Plan' : 'Choose Plan'}
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Checkout Form Card */}
+      <div className="glass-panel rounded-2xl p-8 border border-slate-800 max-w-xl mx-auto space-y-6">
+        <div className="flex items-center gap-3 pb-4 border-b border-slate-800">
+          <Zap size={20} className="text-emerald-400" />
+          <div>
+            <h3 className="text-base font-bold text-white">Complete Your Order & Instant Delivery</h3>
+            <p className="text-xs text-slate-400">Selected: <strong className="text-emerald-400">{plans.find(p => p.id === selectedPlan)?.name}</strong></p>
+          </div>
+        </div>
+
+        {errorMsg && (
+          <div className="p-3 bg-rose-500/10 border border-rose-500/20 rounded-xl text-rose-400 text-xs flex items-center gap-2">
+            <AlertTriangle size={16} />
+            <span>{errorMsg}</span>
+          </div>
+        )}
+
+        <form onSubmit={handleCheckout} className="space-y-4">
+          <div>
+            <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">Your Full Name</label>
+            <input
+              type="text"
+              required
+              placeholder="John Doe"
+              value={customerName}
+              onChange={(e) => setCustomerName(e.target.value)}
+              className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-slate-200 text-xs focus:outline-none focus:border-emerald-500 transition-colors"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">Your Email (License Sent Here)</label>
+            <input
+              type="email"
+              required
+              placeholder="name@company.com"
+              value={customerEmail}
+              onChange={(e) => setCustomerEmail(e.target.value)}
+              className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-slate-200 text-xs focus:outline-none focus:border-emerald-500 transition-colors"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">
+              Machine ID <span className="text-slate-500 lowercase font-normal">(optional — auto-binds on first launch)</span>
+            </label>
+            <input
+              type="text"
+              placeholder="Leave blank for First-Use Auto-Lock, or paste WA-WIN-..."
+              value={machineId}
+              onChange={(e) => setMachineId(e.target.value)}
+              className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-emerald-300 font-mono text-xs focus:outline-none focus:border-emerald-500 transition-colors"
+            />
+          </div>
+
+          <button
+            type="submit"
+            disabled={loading}
+            className="w-full py-3.5 bg-emerald-500 hover:bg-emerald-600 font-bold text-white rounded-xl shadow-lg shadow-emerald-500/20 transition-all text-sm flex items-center justify-center gap-2 disabled:opacity-50 mt-2"
+          >
+            <ShieldCheck size={18} />
+            <span>{loading ? 'Processing Payment...' : `⚡ Pay ${plans.find(p => p.id === selectedPlan)?.price} & Get Instant License`}</span>
+          </button>
+        </form>
+      </div>
     </div>
   );
 }

@@ -1956,6 +1956,258 @@ router.post('/admin/licenses/revoke', async (req, res) => {
   }
 });
 
+// ==========================================
+// 9. Automated Self-Serve Checkout & Payment Webhook Endpoints
+// ==========================================
+
+const PLAN_CONFIGS = {
+  starter: {
+    name: 'Starter Monthly',
+    priceInPaise: 99900, // ₹999
+    validityDays: 30,
+    sessionsLimit: 1,
+    turboAllowed: false,
+    multiSessionAllowed: false
+  },
+  pro: {
+    name: 'Pro Annual',
+    priceInPaise: 499900, // ₹4,999
+    validityDays: 365,
+    sessionsLimit: 5,
+    turboAllowed: true,
+    multiSessionAllowed: true
+  },
+  agency: {
+    name: 'Agency VIP Lifetime',
+    priceInPaise: 1499900, // ₹14,999
+    validityDays: 3650,
+    sessionsLimit: 20,
+    turboAllowed: true,
+    multiSessionAllowed: true
+  }
+};
+
+// Create Checkout Order for Commercial License
+router.post('/checkout/create-license-order', async (req, res) => {
+  const { planId = 'pro', customerName = '', customerEmail = '', machineId = '*' } = req.body || {};
+  const plan = PLAN_CONFIGS[planId] || PLAN_CONFIGS.pro;
+
+  if (!customerEmail) {
+    return res.status(400).json({ success: false, error: 'Customer email is required for license delivery.' });
+  }
+
+  try {
+    const keyId = process.env.RAZORPAY_KEY_ID;
+    const isMock = !keyId || keyId === 'rzp_test_mock_key_id' || keyId === 'rzp_test_change_me';
+
+    if (isMock) {
+      return res.json({
+        success: true,
+        mock: true,
+        orderId: `lic_mock_${Date.now()}`,
+        amount: plan.priceInPaise,
+        currency: 'INR',
+        planId,
+        planName: plan.name,
+        key: 'rzp_test_mock_key_id',
+        customer: { name: customerName || 'Customer', email: customerEmail }
+      });
+    }
+
+    const order = await razorpay.orders.create({
+      amount: plan.priceInPaise,
+      currency: 'INR',
+      receipt: `lic_rcpt_${Date.now()}`,
+      notes: {
+        planId,
+        customerName: customerName || customerEmail,
+        customerEmail,
+        machineId: machineId || '*'
+      }
+    });
+
+    res.json({
+      success: true,
+      mock: false,
+      orderId: order.id,
+      amount: order.amount,
+      currency: order.currency,
+      planId,
+      planName: plan.name,
+      key: process.env.RAZORPAY_KEY_ID,
+      customer: { name: customerName, email: customerEmail }
+    });
+  } catch (error) {
+    console.error('Checkout order creation error:', error);
+    res.status(500).json({ success: false, error: 'Failed to create checkout order: ' + error.message });
+  }
+});
+
+// Verify Payment & Auto-Issue License Key On-Screen
+router.post('/checkout/verify-license-payment', async (req, res) => {
+  const { 
+    razorpay_order_id, 
+    razorpay_payment_id, 
+    razorpay_signature, 
+    planId = 'pro', 
+    customerName = 'Customer', 
+    customerEmail = '', 
+    machineId = '*' 
+  } = req.body || {};
+
+  if (!customerEmail) {
+    return res.status(400).json({ success: false, error: 'Customer email is required.' });
+  }
+
+  const plan = PLAN_CONFIGS[planId] || PLAN_CONFIGS.pro;
+
+  try {
+    const keySecret = process.env.RAZORPAY_KEY_SECRET;
+    const isMock = !keySecret || keySecret === 'rzp_test_mock_key_secret' || keySecret === 'rzp_secret_change_me';
+
+    if (!isMock) {
+      if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature) {
+        return res.status(400).json({ success: false, error: 'Missing payment signature parameters.' });
+      }
+
+      const generatedSignature = crypto
+        .createHmac('sha256', keySecret)
+        .update(`${razorpay_order_id}|${razorpay_payment_id}`)
+        .digest('hex');
+
+      if (generatedSignature !== razorpay_signature) {
+        return res.status(400).json({ success: false, error: 'Payment signature verification failed.' });
+      }
+    }
+
+    const { createLicenseKey } = await import('./utils/licenseGenerator.js');
+    const { run } = await import('./database.js');
+
+    const expiryDate = new Date(Date.now() + plan.validityDays * 24 * 60 * 60 * 1000).toISOString();
+    const features = [
+      'unlimited_campaigns',
+      'anti_ban_warmup',
+      'spintax_engine',
+      'audience_hub_import'
+    ];
+    if (plan.turboAllowed) features.push('turbo_mode_bypass');
+    if (plan.multiSessionAllowed) features.push('multi_device_sessions');
+
+    const licenseKey = createLicenseKey({
+      customer: customerName || customerEmail,
+      client_name: customerName || customerEmail,
+      nodeLockId: (machineId && machineId.trim()) || '*',
+      expiryDate,
+      maxSessions: plan.sessionsLimit,
+      features,
+      gracePeriodDays: 14
+    });
+
+    // Persist in issued_licenses
+    await run(`
+      INSERT INTO issued_licenses (
+        client_name, client_email, machine_id, license_key,
+        plan_type, validity_days, sessions_limit, turbo_allowed,
+        multi_session_allowed, status, notes
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?)
+    `, [
+      customerName || customerEmail,
+      customerEmail.trim(),
+      (machineId && machineId.trim()) || '*',
+      licenseKey,
+      planId,
+      plan.validityDays,
+      plan.sessionsLimit,
+      plan.turboAllowed ? 1 : 0,
+      plan.multiSessionAllowed ? 1 : 0,
+      `Auto-Issued via Online Checkout (${razorpay_payment_id || 'mock_pay'})`
+    ]);
+
+    res.json({
+      success: true,
+      licenseKey,
+      planName: plan.name,
+      customerName: customerName || customerEmail,
+      customerEmail: customerEmail.trim(),
+      machineId: (machineId && machineId.trim()) || '*',
+      validityDays: plan.validityDays,
+      expiresAt: expiryDate,
+      sessionsLimit: plan.sessionsLimit,
+      downloadUrl: 'https://github.com/ayushhbhuutada/whatsapp-automation/releases/latest/download/WhatsAppAutomationSetup.exe'
+    });
+  } catch (error) {
+    console.error('License payment verification error:', error);
+    res.status(500).json({ success: false, error: 'License issue failed: ' + error.message });
+  }
+});
+
+// Automated Inbound Webhook (Razorpay / Stripe / Generic)
+router.post('/webhooks/payment', async (req, res) => {
+  try {
+    const event = req.body?.event || req.body?.type || 'payment.captured';
+    const payload = req.body?.payload?.payment?.entity || req.body?.data?.object || req.body;
+    
+    const email = payload.email || payload.customer_email || payload.notes?.customerEmail || 'customer@automated.license';
+    const name = payload.notes?.customerName || payload.name || 'Automated Customer';
+    const planId = payload.notes?.planId || 'pro';
+    const plan = PLAN_CONFIGS[planId] || PLAN_CONFIGS.pro;
+
+    const { createLicenseKey } = await import('./utils/licenseGenerator.js');
+    const { run } = await import('./database.js');
+
+    const expiryDate = new Date(Date.now() + plan.validityDays * 24 * 60 * 60 * 1000).toISOString();
+    const features = [
+      'unlimited_campaigns',
+      'anti_ban_warmup',
+      'spintax_engine',
+      'audience_hub_import'
+    ];
+    if (plan.turboAllowed) features.push('turbo_mode_bypass');
+    if (plan.multiSessionAllowed) features.push('multi_device_sessions');
+
+    const licenseKey = createLicenseKey({
+      customer: name,
+      client_name: name,
+      nodeLockId: payload.notes?.machineId || '*',
+      expiryDate,
+      maxSessions: plan.sessionsLimit,
+      features,
+      gracePeriodDays: 14
+    });
+
+    await run(`
+      INSERT INTO issued_licenses (
+        client_name, client_email, machine_id, license_key,
+        plan_type, validity_days, sessions_limit, turbo_allowed,
+        multi_session_allowed, status, notes
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?)
+    `, [
+      name,
+      email,
+      payload.notes?.machineId || '*',
+      licenseKey,
+      planId,
+      plan.validityDays,
+      plan.sessionsLimit,
+      plan.turboAllowed ? 1 : 0,
+      plan.multiSessionAllowed ? 1 : 0,
+      `Webhook Event: ${event} (ID: ${payload.id || Date.now()})`
+    ]);
+
+    console.log(`[Webhook] Auto-issued commercial license key for ${email} (${plan.name})`);
+
+    res.json({
+      success: true,
+      event,
+      licenseKey,
+      issuedTo: email
+    });
+  } catch (error) {
+    console.error('Webhook error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 export default router;
 
 
