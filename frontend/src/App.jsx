@@ -51,7 +51,8 @@ import {
 const isDesktopApp = typeof window !== 'undefined' && Boolean(
   window.desktopAPI || 
   window.electronAPI || 
-  (window.navigator && window.navigator.userAgent && window.navigator.userAgent.includes('Electron'))
+  (window.navigator && window.navigator.userAgent && window.navigator.userAgent.includes('Electron')) ||
+  (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'))
 );
 
 const getApiServer = () => {
