@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import SessionManager from './components/SessionManager';
 import axios from 'axios';
+import { generateClientSideLicense, inspectClientSideLicense, getLocalLicenseHistory } from './utils/licenseClient';
 import { 
   LayoutDashboard, 
   Users, 
@@ -4639,6 +4640,33 @@ function AdminLicenseConsoleView() {
   const [historySearch, setHistorySearch] = useState('');
   const [loadingHistory, setLoadingHistory] = useState(false);
 
+  // Inspector State
+  const [inspectKey, setInspectKey] = useState('');
+  const [inspectResult, setInspectResult] = useState(null);
+  const [inspectError, setInspectError] = useState('');
+
+  const fetchHistory = async () => {
+    setLoadingHistory(true);
+    try {
+      const res = await axios.get(`${API_BASE}/admin/licenses/history`);
+      if (res.data?.licenses && Array.isArray(res.data.licenses)) {
+        setLicenses(res.data.licenses);
+        setLoadingHistory(false);
+        return;
+      }
+    } catch (_e) {}
+    // Fallback to client-side localStorage history (for Vercel / offline admin)
+    const local = getLocalLicenseHistory();
+    setLicenses(local);
+    setLoadingHistory(false);
+  };
+
+  useEffect(() => {
+    if (subTab === 'history') {
+      fetchHistory();
+    }
+  }, [subTab]);
+
 // Default Store & Plans Configuration Template
 const DEFAULT_STORE_CONFIG_FRONTEND = {
   brandName: 'WhatsApp Automator Pro',
@@ -4829,14 +4857,27 @@ const DEFAULT_STORE_CONFIG_FRONTEND = {
     setGeneratedKey(null);
     setLoading(true);
     try {
+      // 1. Try local or cloud backend API if available
       const res = await axios.post(`${API_BASE}/admin/licenses/generate`, formData);
       if (res.data?.success) {
         setGeneratedKey(res.data);
-      } else {
-        setErrorMsg(res.data?.error || 'Failed to generate license.');
+        setLoading(false);
+        return;
       }
-    } catch (err) {
-      setErrorMsg(err.response?.data?.error || 'License generation error: ' + err.message);
+    } catch (_err) {
+      // Backend is unreachable (e.g. static Vercel host without local server)
+    }
+
+    try {
+      // 2. Cryptographic client-side generation using Web Crypto API (Ed25519)
+      const clientResult = await generateClientSideLicense(formData);
+      if (clientResult.success) {
+        setGeneratedKey(clientResult);
+      } else {
+        setErrorMsg('Failed to generate license: ' + (clientResult.error || 'Unknown error'));
+      }
+    } catch (clientErr) {
+      setErrorMsg('License generation error: ' + clientErr.message);
     } finally {
       setLoading(false);
     }
@@ -4851,11 +4892,16 @@ const DEFAULT_STORE_CONFIG_FRONTEND = {
       const res = await axios.post(`${API_BASE}/admin/licenses/decode`, { licenseKey: inspectKey.trim() });
       if (res.data?.success) {
         setInspectResult(res.data);
-      } else {
-        setInspectError(res.data?.error || 'Could not decode license key.');
+        return;
       }
-    } catch (err) {
-      setInspectError(err.response?.data?.error || 'Invalid or malformed license token.');
+    } catch (_err) {}
+
+    // Fallback to client-side license decoder
+    const clientDecoded = inspectClientSideLicense(inspectKey.trim());
+    if (clientDecoded.success) {
+      setInspectResult(clientDecoded);
+    } else {
+      setInspectError(clientDecoded.error || 'Invalid or malformed license token.');
     }
   };
 
