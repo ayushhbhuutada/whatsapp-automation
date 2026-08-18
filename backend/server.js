@@ -59,7 +59,13 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 app.use('/api/auth/login', authLimiter);
 app.use('/api/auth/register', authLimiter);
-app.use('/api', apiLimiter);
+// Fast health checks for Electron startup
+app.get('/api/health', (req, res) => {
+  res.json({ status: 'ok', version: '1.0.0', uptime: process.uptime() });
+});
+app.get('/health', (req, res) => {
+  res.json({ status: 'ok', version: '1.0.0', uptime: process.uptime() });
+});
 
 // Register API Routes
 app.use('/api', apiRouter);

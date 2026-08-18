@@ -31,6 +31,8 @@
     "playwright": "^1.44.0",
     "puppeteer": "^24.1.0",
     "puppeteer-core": "^24.1.0",
+    "puppeteer-extra": "^3.3.6",
+    "puppeteer-extra-plugin-stealth": "^2.11.2",
     "qrcode": "^1.5.4",
     "razorpay": "^2.9.8",
     "whatsapp-web.js": "^1.26.0",
@@ -58,8 +60,11 @@
     ],
     "asar": true,
     "asarUnpack": [
+      "backend/**/*",
+      "frontend/dist/**/*",
       "**/*.node"
     ],
+    "forceCodeSigning": false,
     "win": {
       "target": [
         {
@@ -67,9 +72,17 @@
           "arch": [
             "x64"
           ]
+        },
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
         }
       ],
-      "executableName": "WhatsAppAutomation"
+      "executableName": "WhatsAppAutomation",
+      "signAndEditExecutable": false,
+      "verifyUpdateCodeSignature": false
     },
     "nsis": {
       "oneClick": false,

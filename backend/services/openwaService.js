@@ -1,5 +1,25 @@
 import { createRequire } from 'module';
 const require = createRequire(import.meta.url);
+
+// Anti-Ban Stealth Layer: Initialize puppeteer-extra with stealth plugin
+try {
+  const puppeteerExtra = require('puppeteer-extra');
+  const StealthPlugin = require('puppeteer-extra-plugin-stealth');
+  puppeteerExtra.use(StealthPlugin());
+
+  // Monkey-patch require.cache so whatsapp-web.js uses puppeteer-extra with Stealth
+  const puppeteerPath = require.resolve('puppeteer');
+  require.cache[puppeteerPath] = {
+    id: puppeteerPath,
+    filename: puppeteerPath,
+    loaded: true,
+    exports: puppeteerExtra
+  };
+  console.log('[Anti-Ban Stealth] Loaded puppeteer-extra-plugin-stealth and patched runtime.');
+} catch (stealthErr) {
+  console.warn('[Anti-Ban Stealth] Warning: puppeteer-extra stealth init skipped:', stealthErr.message);
+}
+
 const { Client, LocalAuth, MessageMedia } = require('whatsapp-web.js');
 const QRCode = require('qrcode');
 
@@ -173,15 +193,35 @@ class OpenWAService {
         const browserExecutable = findChromiumExecutable();
         const client = new Client({
           authStrategy: new LocalAuth({ clientId: sessionId, dataPath: baseSessionsDir }),
+          userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36',
           puppeteer: {
             executablePath: browserExecutable || undefined,
             headless: isHeadless,
+            defaultViewport: null,
             args: [
               '--no-sandbox',
               '--disable-setuid-sandbox',
-              '--disable-gpu',
-              '--disable-dev-shm-usage'
+              '--disable-dev-shm-usage',
+              '--disable-blink-features=AutomationControlled',
+              '--disable-features=IsolateOrigins,site-per-process',
+              '--no-default-browser-check',
+              '--no-first-run',
+              '--window-size=1280,800'
             ]
+          },
+          evalOnNewDoc: () => {
+            try {
+              Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
+            } catch (e) {}
+            try {
+              window.chrome = window.chrome || { runtime: {} };
+            } catch (e) {}
+            try {
+              Object.defineProperty(navigator, 'languages', { get: () => ['en-US', 'en'] });
+            } catch (e) {}
+            try {
+              Object.defineProperty(navigator, 'plugins', { get: () => [1, 2, 3, 4, 5] });
+            } catch (e) {}
           }
         });
 

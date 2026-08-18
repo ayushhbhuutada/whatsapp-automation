@@ -724,21 +724,7 @@ export function deepDiversifyMessage(text, settings = {}) {
   }
   let result = text;
   
-  // 1. Random zero-width space insertion between words (invisible to user, unique to WhatsApp's hash)
-  const zwsp = '\u200B'; // Zero-width space
-  const words = result.split(' ');
-  if (words.length > 3) {
-    // Insert zero-width space after 1-3 random words
-    const insertCount = 1 + Math.floor(Math.random() * Math.min(3, words.length - 1));
-    const positions = new Set();
-    while (positions.size < insertCount) {
-      positions.add(Math.floor(Math.random() * (words.length - 1)));
-    }
-    const diversified = words.map((word, i) => positions.has(i) ? word + zwsp : word);
-    result = diversified.join(' ');
-  }
-  
-  // 2. Random punctuation variation (curly vs straight quotes, different dashes)
+  // 1. Natural punctuation and phrasing variation (curly vs straight quotes, different dashes)
   if (Math.random() > 0.5) {
     // Occasionally swap straight quotes for curly
     result = result.replace(/"/g, () => Math.random() > 0.5 ? '\u201C' : '\u201D');
@@ -750,8 +736,8 @@ export function deepDiversifyMessage(text, settings = {}) {
     });
   }
   
-  // 3. Random trailing whitespace variation (invisible but changes hash)
-  const trailingVariations = ['', ' ', '  ', '\u200B', '\u200B\u200B'];
+  // 2. Safe trailing whitespace variation (standard spaces only, no invisible unicode characters)
+  const trailingVariations = ['', ' ', '  '];
   result = result.trimEnd() + trailingVariations[Math.floor(Math.random() * trailingVariations.length)];
   
   // 4. Random paragraph break insertion for long messages (>100 chars)

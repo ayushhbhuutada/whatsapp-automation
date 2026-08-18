@@ -22,6 +22,8 @@
     "playwright": "^1.44.0",
     "puppeteer": "^24.1.0",
     "puppeteer-core": "^24.1.0",
+    "puppeteer-extra": "^3.3.6",
+    "puppeteer-extra-plugin-stealth": "^2.11.2",
     "qrcode": "^1.5.4",
     "razorpay": "^2.9.8",
     "whatsapp-web.js": "^1.26.0",

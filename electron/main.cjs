@@ -142,10 +142,17 @@ function checkServerReady(url, maxAttempts = 35) {
  * Resolves path to backend server.js in both dev and packaged production
  */
 function getBackendServerPath() {
-  if (process.resourcesPath) {
-    const unpackedPath = path.join(process.resourcesPath, 'app.asar.unpacked', 'backend', 'server.js');
-    if (fs.existsSync(unpackedPath)) {
-      return unpackedPath;
+  const candidatePaths = [
+    process.resourcesPath ? path.join(process.resourcesPath, 'app.asar.unpacked', 'backend', 'server.js') : null,
+    process.resourcesPath ? path.join(process.resourcesPath, 'backend', 'server.js') : null,
+    path.resolve(__dirname, '../backend/server.js'),
+    path.resolve(process.cwd(), 'backend/server.js'),
+    path.resolve(__dirname, '../../backend/server.js')
+  ].filter(Boolean);
+
+  for (const p of candidatePaths) {
+    if (fs.existsSync(p)) {
+      return p;
     }
   }
   return path.resolve(__dirname, '../backend/server.js');
@@ -157,11 +164,18 @@ function getBackendServerPath() {
 function startBackendServer(port) {
   const appPaths = getAppDataPaths();
   const serverPath = getBackendServerPath();
-  const backendDir = path.dirname(serverPath);
-  const backendNodeModules = path.join(backendDir, 'node_modules');
-  const rootNodeModules = path.resolve(backendDir, '../node_modules');
+  let backendDir = path.dirname(serverPath);
 
-  const nodePath = [backendNodeModules, rootNodeModules].join(path.delimiter);
+  // Guard: Ensure cwd is always an existing physical directory (never a virtual asar path)
+  if (!fs.existsSync(backendDir) || backendDir.includes('app.asar')) {
+    backendDir = appPaths.appData;
+  }
+
+  const backendNodeModules = path.join(path.dirname(serverPath), 'node_modules');
+  const rootNodeModules = path.resolve(path.dirname(serverPath), '../node_modules');
+  const unpackedNodeModules = process.resourcesPath ? path.join(process.resourcesPath, 'app.asar.unpacked', 'node_modules') : '';
+
+  const nodePath = [backendNodeModules, rootNodeModules, unpackedNodeModules].filter(Boolean).join(path.delimiter);
 
   const env = {
     ...process.env,
@@ -181,30 +195,42 @@ function startBackendServer(port) {
   const logFile = path.join(appPaths.logsPath, 'backend_startup.log');
   const logStream = fs.createWriteStream(logFile, { flags: 'a' });
 
-  serverProcess = spawn(nodeExecutable, [serverPath], {
-    env,
-    cwd: backendDir,
-    stdio: ['ignore', 'pipe', 'pipe'],
-    windowsHide: true
-  });
+  logStream.write(`\n[${new Date().toISOString()}] Launching backend from: ${serverPath}\n  cwd: ${backendDir}\n  exec: ${nodeExecutable}\n`);
 
-  if (serverProcess.stdout) {
-    serverProcess.stdout.pipe(logStream);
-  }
-  if (serverProcess.stderr) {
-    serverProcess.stderr.pipe(logStream);
-  }
+  try {
+    serverProcess = spawn(nodeExecutable, [serverPath], {
+      env,
+      cwd: backendDir,
+      stdio: ['ignore', 'pipe', 'pipe'],
+      windowsHide: true
+    });
 
-  serverProcess.on('error', (err) => {
-    console.error('[Electron Main] Backend server spawn error:', err);
+    if (serverProcess.stdout) {
+      serverProcess.stdout.pipe(logStream);
+    }
+    if (serverProcess.stderr) {
+      serverProcess.stderr.pipe(logStream);
+    }
+
+    serverProcess.on('error', (err) => {
+      console.error('[Electron Main] Backend server spawn error:', err);
+      try {
+        fs.appendFileSync(logFile, `[Spawn Error] ${err.message}\n`);
+      } catch (e) {}
+    });
+
+    serverProcess.on('exit', (code, signal) => {
+      console.log(`[Electron Main] Backend server exited: code=${code}, signal=${signal}`);
+      try {
+        fs.appendFileSync(logFile, `[Server Exit] code=${code}, signal=${signal}\n`);
+      } catch (e) {}
+    });
+  } catch (spawnErr) {
+    console.error('[Electron Main] Synchronous spawn exception:', spawnErr);
     try {
-      fs.appendFileSync(logFile, `[Spawn Error] ${err.message}\n`);
+      fs.appendFileSync(logFile, `[Sync Spawn Error] ${spawnErr.message}\n`);
     } catch (e) {}
-  });
-
-  serverProcess.on('exit', (code, signal) => {
-    console.log(`[Electron Main] Backend server exited: code=${code}, signal=${signal}`);
-  });
+  }
 }
 
 /**
@@ -396,7 +422,10 @@ if (app) {
 
     // 4. Verify server readiness
     updateSplashStatus('Connecting to automation engine...');
-    await checkServerReady(`http://localhost:${selectedPort}/api/anti-ban/health`, 40);
+    const isReady = await checkServerReady(`http://localhost:${selectedPort}/api/health`, 25);
+    if (!isReady) {
+      await checkServerReady(`http://localhost:${selectedPort}/api/anti-ban/health`, 15);
+    }
 
     // 5. Open workspace window
     updateSplashStatus('Opening workspace interface...');

@@ -16,12 +16,18 @@ asarUnpack:
   - "backend/**/*"
   - "frontend/dist/**/*"
   - "**/*.node"
+forceCodeSigning: false
 win:
   target:
     - target: nsis
       arch:
         - x64
+    - target: portable
+      arch:
+        - x64
   executableName: WhatsAppAutomation
+  signAndEditExecutable: false
+  verifyUpdateCodeSignature: false
 nsis:
   oneClick: false
   allowToChangeInstallationDirectory: true
