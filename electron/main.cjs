@@ -264,6 +264,22 @@ function registerIpcHandlers() {
   });
 }
 
+function getFrontendIndexPath() {
+  const possiblePaths = [
+    process.resourcesPath ? path.join(process.resourcesPath, 'app', 'frontend', 'dist', 'index.html') : null,
+    process.resourcesPath ? path.join(process.resourcesPath, 'frontend', 'dist', 'index.html') : null,
+    path.resolve(__dirname, '../frontend/dist/index.html'),
+    path.resolve(__dirname, '../../frontend/dist/index.html'),
+    path.resolve(process.cwd(), 'frontend/dist/index.html'),
+    path.resolve(process.cwd(), 'resources/app/frontend/dist/index.html')
+  ].filter(Boolean);
+
+  for (const p of possiblePaths) {
+    if (fs.existsSync(p)) return p;
+  }
+  return null;
+}
+
 /**
  * Creates primary application browser window
  */
@@ -279,7 +295,7 @@ function createWindow(port) {
     minHeight: 700,
     title: 'WhatsApp Automation Pro',
     backgroundColor: '#020617',
-    show: false, // Don't show until rendered to prevent white/black flash
+    show: true,
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
@@ -289,63 +305,32 @@ function createWindow(port) {
   });
 
   mainWindow.setMenuBarVisibility(false);
-  mainWindow.loadURL(`http://127.0.0.1:${port}`);
+  
+  const indexPath = getFrontendIndexPath();
+  if (indexPath) {
+    mainWindow.loadFile(indexPath);
+  } else {
+    mainWindow.loadURL(`http://127.0.0.1:${port}`);
+  }
 
-  // Gracefully transition from Splash screen to Main Window
+  // Gracefully dismiss Splash screen once Main Window is shown
+  if (splashWindow && !splashWindow.isDestroyed()) {
+    try { splashWindow.close(); } catch (e) {}
+  }
+
   mainWindow.once('ready-to-show', () => {
-    if (mainWindow && !mainWindow.isDestroyed()) {
-      mainWindow.show();
-      mainWindow.focus();
-    }
-    if (splashWindow && !splashWindow.isDestroyed()) {
-      setTimeout(() => {
-        try {
-          splashWindow.close();
-        } catch (e) {}
-      }, 300);
-    }
-  });
-
-  // Fallback in case ready-to-show is delayed
-  mainWindow.webContents.on('did-finish-load', () => {
-    if (mainWindow && !mainWindow.isVisible()) {
-      mainWindow.show();
-    }
-    if (splashWindow && !splashWindow.isDestroyed()) {
-      try {
-        splashWindow.close();
-      } catch (e) {}
-    }
-  });
-
-  // Strict visibility guarantee to prevent blank/hidden windows on other PCs
-  setTimeout(() => {
-    if (mainWindow && !mainWindow.isDestroyed() && !mainWindow.isVisible()) {
-      mainWindow.show();
-      mainWindow.focus();
-    }
     if (splashWindow && !splashWindow.isDestroyed()) {
       try { splashWindow.close(); } catch (e) {}
     }
-  }, 1200);
-
-  mainWindow.webContents.on('did-fail-load', (event, errorCode, errorDescription, validatedURL) => {
-    console.warn(`[Electron] Load failure (${errorCode}: ${errorDescription}) at ${validatedURL}. Retrying...`);
-    setTimeout(() => {
-      if (mainWindow && !mainWindow.isDestroyed()) {
-        mainWindow.loadURL(`http://127.0.0.1:${port}`);
-      }
-    }, 1200);
   });
 
-  mainWindow.on('closed', () => {
-    mainWindow = null;
-    if (splashWindow && !splashWindow.isDestroyed()) {
-      try { splashWindow.close(); } catch (e) {}
-    }
-    if (app && !app.isQuitting) {
+  mainWindow.on('close', () => {
+    if (app) {
       app.isQuitting = true;
-      app.quit();
+      if (serverProcess) {
+        try { serverProcess.kill('SIGTERM'); } catch (e) {}
+      }
+      app.exit(0);
     }
   });
 
