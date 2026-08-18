@@ -338,12 +338,15 @@ function createWindow(port) {
     }, 1200);
   });
 
-  mainWindow.on('close', (event) => {
-    if (app && !app.isQuitting) {
-      event.preventDefault();
-      mainWindow.hide();
+  mainWindow.on('closed', () => {
+    mainWindow = null;
+    if (splashWindow && !splashWindow.isDestroyed()) {
+      try { splashWindow.close(); } catch (e) {}
     }
-    return false;
+    if (app && !app.isQuitting) {
+      app.isQuitting = true;
+      app.quit();
+    }
   });
 
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
