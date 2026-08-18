@@ -137,6 +137,7 @@ function checkServerReady(url, maxAttempts = 35) {
  */
 function getBackendServerPath() {
   const candidatePaths = [
+    process.resourcesPath ? path.join(process.resourcesPath, 'app', 'backend', 'server.js') : null,
     process.resourcesPath ? path.join(process.resourcesPath, 'app.asar.unpacked', 'backend', 'server.js') : null,
     process.resourcesPath ? path.join(process.resourcesPath, 'backend', 'server.js') : null,
     path.resolve(__dirname, '../backend/server.js'),
@@ -348,8 +349,18 @@ function createTray() {
   }
 }
 
-// Lifecycle Events
+// Hardware & GPU Stability Flags for Windows
 if (app) {
+  try {
+    app.disableHardwareAcceleration();
+    app.commandLine.appendSwitch('no-sandbox');
+    app.commandLine.appendSwitch('disable-gpu');
+    app.commandLine.appendSwitch('disable-software-rasterizer');
+    app.commandLine.appendSwitch('disable-gpu-compositing');
+    app.commandLine.appendSwitch('disable-gpu-rasterization');
+    app.commandLine.appendSwitch('disable-gpu-sandbox');
+  } catch (e) {}
+
   app.whenReady().then(async () => {
     // 1. Immediately display instant startup splash dialog (0.1s response)
     createSplashWindow();

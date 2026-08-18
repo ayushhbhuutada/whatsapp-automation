@@ -59,12 +59,7 @@
       "electron/**/*",
       "package.json"
     ],
-    "asar": true,
-    "asarUnpack": [
-      "backend/**/*",
-      "frontend/dist/**/*",
-      "**/*.node"
-    ],
+    "asar": false,
     "forceCodeSigning": false,
     "win": {
       "target": [
