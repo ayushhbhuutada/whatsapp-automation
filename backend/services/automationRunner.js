@@ -33,7 +33,9 @@ class AutomationRunner {
     this.status = 'Idle'; // Idle, Running, Paused, Stopped
     this.keepRunning = false;
     this.isStarting = false;
-    this.recoverStrandedContacts().catch(() => {});
+    setTimeout(() => {
+      this.recoverStrandedContacts().catch(() => {});
+    }, 1000);
   }
 
   async recoverStrandedContacts(campaignId = null) {

@@ -183,6 +183,19 @@ async function startBackendServer(port) {
   }
 }
 
+function getServiceUrl(relPath) {
+  const { pathToFileURL } = require('url');
+  const possiblePaths = [
+    path.join(__dirname, relPath),
+    process.resourcesPath ? path.join(process.resourcesPath, 'app', 'backend', relPath.replace('../backend/', '')) : null,
+    path.resolve(process.cwd(), 'backend', relPath.replace('../backend/', ''))
+  ].filter(Boolean);
+  for (const p of possiblePaths) {
+    if (fs.existsSync(p)) return pathToFileURL(p).href;
+  }
+  return pathToFileURL(path.join(__dirname, relPath)).href;
+}
+
 /**
  * Registers secure IPC handlers for desktop context bridge
  */
@@ -190,7 +203,8 @@ function registerIpcHandlers() {
   // 1. Get Hardware Machine ID
   ipcMain.handle('get-machine-id', async () => {
     try {
-      const { getMachineId } = await import('../backend/services/hardwareIdService.js');
+      const url = getServiceUrl('../backend/services/hardwareIdService.js');
+      const { getMachineId } = await import(url);
       return getMachineId();
     } catch (e) {
       const mac = os.hostname() + ':::' + os.arch() + ':::' + os.platform();
@@ -202,7 +216,8 @@ function registerIpcHandlers() {
   // 2. Get License Status
   ipcMain.handle('get-license-status', async () => {
     try {
-      const { getLicenseStatus } = await import('../backend/services/licenseService.js');
+      const url = getServiceUrl('../backend/services/licenseService.js');
+      const { getLicenseStatus } = await import(url);
       return await getLicenseStatus();
     } catch (e) {
       return { activated: false, error: e.message };
@@ -212,7 +227,8 @@ function registerIpcHandlers() {
   // 3. Activate License
   ipcMain.handle('activate-license', async (event, licenseKey) => {
     try {
-      const { activateLicense } = await import('../backend/services/licenseService.js');
+      const url = getServiceUrl('../backend/services/licenseService.js');
+      const { activateLicense } = await import(url);
       return await activateLicense(licenseKey);
     } catch (e) {
       return { success: false, error: e.message };

@@ -1,27 +1,31 @@
 import { createRequire } from 'module';
 const require = createRequire(import.meta.url);
 
-// Anti-Ban Stealth Layer: Initialize puppeteer-extra with stealth plugin
-try {
-  const puppeteerExtra = require('puppeteer-extra');
-  const StealthPlugin = require('puppeteer-extra-plugin-stealth');
-  puppeteerExtra.use(StealthPlugin());
+let _wwebModules = null;
+function getWWeb() {
+  if (_wwebModules) return _wwebModules;
+  try {
+    const puppeteerExtra = require('puppeteer-extra');
+    const StealthPlugin = require('puppeteer-extra-plugin-stealth');
+    puppeteerExtra.use(StealthPlugin());
 
-  // Monkey-patch require.cache so whatsapp-web.js uses puppeteer-extra with Stealth
-  const puppeteerPath = require.resolve('puppeteer');
-  require.cache[puppeteerPath] = {
-    id: puppeteerPath,
-    filename: puppeteerPath,
-    loaded: true,
-    exports: puppeteerExtra
-  };
-  console.log('[Anti-Ban Stealth] Loaded puppeteer-extra-plugin-stealth and patched runtime.');
-} catch (stealthErr) {
-  console.warn('[Anti-Ban Stealth] Warning: puppeteer-extra stealth init skipped:', stealthErr.message);
+    const puppeteerPath = require.resolve('puppeteer');
+    require.cache[puppeteerPath] = {
+      id: puppeteerPath,
+      filename: puppeteerPath,
+      loaded: true,
+      exports: puppeteerExtra
+    };
+    console.log('[Anti-Ban Stealth] Loaded puppeteer-extra-plugin-stealth and patched runtime.');
+  } catch (stealthErr) {
+    console.warn('[Anti-Ban Stealth] Warning: puppeteer-extra stealth init skipped:', stealthErr?.message);
+  }
+
+  const { Client, LocalAuth, MessageMedia } = require('whatsapp-web.js');
+  const QRCode = require('qrcode');
+  _wwebModules = { Client, LocalAuth, MessageMedia, QRCode };
+  return _wwebModules;
 }
-
-const { Client, LocalAuth, MessageMedia } = require('whatsapp-web.js');
-const QRCode = require('qrcode');
 
 import fs from 'fs';
 import path from 'path';
@@ -203,6 +207,7 @@ class OpenWAService {
         } catch (e) {}
 
         const browserExecutable = findChromiumExecutable();
+        const { Client, LocalAuth, QRCode } = getWWeb();
         const client = new Client({
           authStrategy: new LocalAuth({ clientId: sessionId, dataPath: baseSessionsDir }),
           userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36',
@@ -763,6 +768,7 @@ class OpenWAService {
         } catch (presenceErr) {}
       }
 
+      const { MessageMedia } = getWWeb();
       let media;
       if (fileUrlOrPath.startsWith('http://') || fileUrlOrPath.startsWith('https://')) {
         media = await MessageMedia.fromUrl(fileUrlOrPath);

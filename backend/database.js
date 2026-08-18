@@ -42,11 +42,26 @@ try {
 if (!db) {
   try {
     const initSqlJs = require('sql.js');
-    let wasmPath = undefined;
-    try {
-      wasmPath = require.resolve('sql.js/dist/sql-wasm.wasm');
-    } catch (e) {}
-    const SQL = await initSqlJs(wasmPath ? { locateFile: () => wasmPath } : undefined);
+    const initFn = typeof initSqlJs === 'function' ? initSqlJs : initSqlJs.default;
+    let wasmBinary = undefined;
+    const possibleWasmPaths = [
+      path.resolve(__dirname, '../node_modules/sql.js/dist/sql-wasm.wasm'),
+      path.resolve(__dirname, '../../node_modules/sql.js/dist/sql-wasm.wasm'),
+      process.resourcesPath ? path.join(process.resourcesPath, 'app', 'node_modules', 'sql.js', 'dist', 'sql-wasm.wasm') : null,
+      process.resourcesPath ? path.join(process.resourcesPath, 'node_modules', 'sql.js', 'dist', 'sql-wasm.wasm') : null,
+      path.resolve(process.cwd(), 'node_modules/sql.js/dist/sql-wasm.wasm'),
+      path.resolve(process.cwd(), 'resources/app/node_modules/sql.js/dist/sql-wasm.wasm')
+    ].filter(Boolean);
+
+    for (const wp of possibleWasmPaths) {
+      try {
+        if (fs.existsSync(wp)) {
+          wasmBinary = fs.readFileSync(wp);
+          break;
+        }
+      } catch (e) {}
+    }
+    const SQL = await initFn(wasmBinary ? { wasmBinary, locateFile: () => '' } : undefined);
     if (fs.existsSync(dbPath)) {
       const filebuffer = fs.readFileSync(dbPath);
       wasmDb = new SQL.Database(filebuffer);
