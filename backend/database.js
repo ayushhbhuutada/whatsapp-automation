@@ -61,7 +61,7 @@ if (!db) {
         }
       } catch (e) {}
     }
-    const SQL = await initFn(wasmBinary ? { wasmBinary, locateFile: () => '' } : undefined);
+    const SQL = await initFn(wasmBinary ? { wasmBinary: new Uint8Array(wasmBinary) } : undefined);
     if (fs.existsSync(dbPath)) {
       const filebuffer = fs.readFileSync(dbPath);
       wasmDb = new SQL.Database(filebuffer);

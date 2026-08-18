@@ -366,16 +366,10 @@ function createTray() {
   }
 }
 
-// Hardware & GPU Stability Flags for Windows
+// Standard stability defaults
 if (app) {
   try {
-    app.disableHardwareAcceleration();
     app.commandLine.appendSwitch('no-sandbox');
-    app.commandLine.appendSwitch('disable-gpu');
-    app.commandLine.appendSwitch('disable-software-rasterizer');
-    app.commandLine.appendSwitch('disable-gpu-compositing');
-    app.commandLine.appendSwitch('disable-gpu-rasterization');
-    app.commandLine.appendSwitch('disable-gpu-sandbox');
   } catch (e) {}
 
   app.whenReady().then(async () => {
@@ -397,14 +391,7 @@ if (app) {
     updateSplashStatus('Starting local automation engine...');
     await startBackendServer(selectedPort);
 
-    // 4. Verify server readiness
-    updateSplashStatus('Connecting to automation engine...');
-    const isReady = await checkServerReady(`http://127.0.0.1:${selectedPort}/api/health`, 30);
-    if (!isReady) {
-      await checkServerReady(`http://127.0.0.1:${selectedPort}/api/anti-ban/health`, 15);
-    }
-
-    // 5. Open workspace window
+    // 4. Open workspace window immediately
     updateSplashStatus('Opening workspace interface...');
     createWindow(selectedPort);
     createTray();

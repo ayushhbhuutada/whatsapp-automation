@@ -39,6 +39,8 @@ backend/node_modules/
 frontend/node_modules/
 frontend/dist/
 dist_electron/
+dist_build/
+dist_portable/
 release_dist/
 dist/
 .wwebjs_auth/
