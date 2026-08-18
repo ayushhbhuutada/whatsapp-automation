@@ -678,39 +678,6 @@ export default function App() {
               <SettingsIcon size={18} />
               Settings
             </button>
-            <button 
-              onClick={() => setActiveTab('saas')}
-              className={`sidebar-link ${activeTab === 'saas' ? 'active' : ''} w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 text-sm font-medium ${
-                activeTab === 'saas' 
-                  ? 'bg-slate-800 text-emerald-400 border border-slate-700/50' 
-                  : 'text-slate-400 hover:bg-slate-900/50 hover:text-slate-200'
-              }`}
-            >
-              <Users size={18} />
-              Team & Seats
-            </button>
-            <button 
-              onClick={() => setActiveTab('pricing')}
-              className={`sidebar-link ${activeTab === 'pricing' ? 'active' : ''} w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 text-sm font-medium ${
-                activeTab === 'pricing' 
-                  ? 'bg-slate-800 text-emerald-400 border border-slate-700/50' 
-                  : 'text-slate-400 hover:bg-slate-900/50 hover:text-slate-200'
-              }`}
-            >
-              <Zap size={18} />
-              Pricing & Buy
-            </button>
-            <button 
-              onClick={() => setActiveTab('admin_licenses')}
-              className={`sidebar-link ${activeTab === 'admin_licenses' ? 'active' : ''} w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 text-sm font-medium ${
-                activeTab === 'admin_licenses' 
-                  ? 'bg-slate-800 text-emerald-400 border border-slate-700/50' 
-                  : 'text-slate-400 hover:bg-slate-900/50 hover:text-slate-200'
-              }`}
-            >
-              <ShieldCheck size={18} />
-              Admin Licenses
-            </button>
           </nav>
         </div>
 
@@ -937,20 +904,6 @@ export default function App() {
                 setActiveTab('dashboard');
               }}
             />
-          )}
-
-          {activeTab === 'saas' && (
-            <TeamManagementView />
-          )}
-
-          {activeTab === 'pricing' && (
-            <PricingView onActivate={(key) => {
-              setActiveTab('settings');
-            }} />
-          )}
-
-          {activeTab === 'admin_licenses' && (
-            <AdminLicenseConsoleView />
           )}
         </div>
       </main>
