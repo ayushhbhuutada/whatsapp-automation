@@ -1,10 +1,10 @@
-const { app, BrowserWindow, Tray, Menu, ipcMain, shell } = require('electron');
+const { app, BrowserWindow, Tray, Menu, ipcMain, shell, utilityProcess } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
 const net = require('net');
 const http = require('http');
-const { spawn } = require('child_process');
+const { spawn, fork } = require('child_process');
 const crypto = require('crypto');
 
 let mainWindow = null;
@@ -55,7 +55,7 @@ function createSplashWindow() {
     transparent: false,
     backgroundColor: '#020617',
     center: true,
-    show: false,
+    show: true,
     alwaysOnTop: true,
     skipTaskbar: false,
     webPreferences: {
@@ -68,12 +68,6 @@ function createSplashWindow() {
   if (fs.existsSync(splashPath)) {
     splashWindow.loadFile(splashPath);
   }
-
-  splashWindow.once('ready-to-show', () => {
-    if (splashWindow && !splashWindow.isDestroyed()) {
-      splashWindow.show();
-    }
-  });
 }
 
 /**
@@ -159,76 +153,31 @@ function getBackendServerPath() {
 }
 
 /**
- * Spawns embedded Express backend server child process
+ * Initializes embedded Express backend server directly inside Electron Node runtime
  */
-function startBackendServer(port) {
+async function startBackendServer(port) {
   const appPaths = getAppDataPaths();
   const serverPath = getBackendServerPath();
-  let backendDir = path.dirname(serverPath);
 
-  // Guard: Ensure cwd is always an existing physical directory (never a virtual asar path)
-  if (!fs.existsSync(backendDir) || backendDir.includes('app.asar')) {
-    backendDir = appPaths.appData;
-  }
+  process.env.PORT = String(port);
+  process.env.NODE_ENV = 'production';
+  process.env.IS_ELECTRON = 'true';
+  process.env.APPDATA_DIR = appPaths.appData;
+  process.env.DB_PATH = appPaths.dbPath;
+  process.env.SESSIONS_DIR = appPaths.sessionPath;
+  process.env.UPLOADS_DIR = appPaths.uploadsPath;
+  process.env.ATTACHMENTS_DIR = appPaths.attachmentsPath;
 
-  const backendNodeModules = path.join(path.dirname(serverPath), 'node_modules');
-  const rootNodeModules = path.resolve(path.dirname(serverPath), '../node_modules');
-  const unpackedNodeModules = process.resourcesPath ? path.join(process.resourcesPath, 'app.asar.unpacked', 'node_modules') : '';
-
-  const nodePath = [backendNodeModules, rootNodeModules, unpackedNodeModules].filter(Boolean).join(path.delimiter);
-
-  const env = {
-    ...process.env,
-    PORT: String(port),
-    NODE_ENV: 'production',
-    IS_ELECTRON: 'true',
-    NODE_PATH: nodePath,
-    APPDATA_DIR: appPaths.appData,
-    DB_PATH: appPaths.dbPath,
-    SESSIONS_DIR: appPaths.sessionPath,
-    UPLOADS_DIR: appPaths.uploadsPath,
-    ATTACHMENTS_DIR: appPaths.attachmentsPath,
-    ELECTRON_RUN_AS_NODE: '1'
-  };
-
-  const nodeExecutable = process.execPath;
   const logFile = path.join(appPaths.logsPath, 'backend_startup.log');
-  const logStream = fs.createWriteStream(logFile, { flags: 'a' });
-
-  logStream.write(`\n[${new Date().toISOString()}] Launching backend from: ${serverPath}\n  cwd: ${backendDir}\n  exec: ${nodeExecutable}\n`);
-
   try {
-    serverProcess = spawn(nodeExecutable, [serverPath], {
-      env,
-      cwd: backendDir,
-      stdio: ['ignore', 'pipe', 'pipe'],
-      windowsHide: true
-    });
-
-    if (serverProcess.stdout) {
-      serverProcess.stdout.pipe(logStream);
-    }
-    if (serverProcess.stderr) {
-      serverProcess.stderr.pipe(logStream);
-    }
-
-    serverProcess.on('error', (err) => {
-      console.error('[Electron Main] Backend server spawn error:', err);
-      try {
-        fs.appendFileSync(logFile, `[Spawn Error] ${err.message}\n`);
-      } catch (e) {}
-    });
-
-    serverProcess.on('exit', (code, signal) => {
-      console.log(`[Electron Main] Backend server exited: code=${code}, signal=${signal}`);
-      try {
-        fs.appendFileSync(logFile, `[Server Exit] code=${code}, signal=${signal}\n`);
-      } catch (e) {}
-    });
-  } catch (spawnErr) {
-    console.error('[Electron Main] Synchronous spawn exception:', spawnErr);
+    fs.appendFileSync(logFile, `\n[${new Date().toISOString()}] Initializing embedded backend from: ${serverPath}\n`);
+    const { pathToFileURL } = require('url');
+    await import(pathToFileURL(serverPath).href);
+    fs.appendFileSync(logFile, `[${new Date().toISOString()}] Embedded backend initialized successfully on port ${port}.\n`);
+  } catch (err) {
+    console.error('[Electron Main] Embedded backend initialization error:', err);
     try {
-      fs.appendFileSync(logFile, `[Sync Spawn Error] ${spawnErr.message}\n`);
+      fs.appendFileSync(logFile, `[Backend Init Error] ${err.message}\n${err.stack}\n`);
     } catch (e) {}
   }
 }
@@ -418,7 +367,7 @@ if (app) {
 
     // 3. Start local automation backend server
     updateSplashStatus('Starting local automation engine...');
-    startBackendServer(selectedPort);
+    await startBackendServer(selectedPort);
 
     // 4. Verify server readiness
     updateSplashStatus('Connecting to automation engine...');

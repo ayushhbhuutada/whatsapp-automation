@@ -1,18 +1,102 @@
-import { DatabaseSync } from 'node:sqlite';
+import { createRequire } from 'module';
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
 import { getDatabasePath } from './paths.js';
 
+const require = createRequire(import.meta.url);
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const dbPath = getDatabasePath();
-const db = new DatabaseSync(dbPath);
 
-db.exec('PRAGMA journal_mode = WAL');
-db.exec('PRAGMA foreign_keys = ON');
-db.exec('PRAGMA busy_timeout = 5000');
+// Universal SQLite adapter: supports Node 22+ (node:sqlite) and WASM (sql.js)
+let db = null;
+let isWasm = false;
+let wasmDb = null;
+
+function saveWasmDb() {
+  if (isWasm && wasmDb) {
+    try {
+      const data = wasmDb.export();
+      const buffer = Buffer.from(data);
+      fs.writeFileSync(dbPath, buffer);
+    } catch (e) {
+      console.error('[SQLite WASM Save Error]:', e.message);
+    }
+  }
+}
+
+// 1. Try native node:sqlite (Node 22+)
+try {
+  const nodeSqlite = require('node:sqlite');
+  if (nodeSqlite && nodeSqlite.DatabaseSync) {
+    db = new nodeSqlite.DatabaseSync(dbPath);
+    db.exec('PRAGMA journal_mode = WAL');
+    db.exec('PRAGMA foreign_keys = ON');
+    db.exec('PRAGMA busy_timeout = 5000');
+  }
+} catch (e) {}
+
+// 2. Fallback to sql.js (WASM SQLite for Node 20 / Electron 30)
+if (!db) {
+  try {
+    const initSqlJs = require('sql.js');
+    const SQL = await initSqlJs();
+    if (fs.existsSync(dbPath)) {
+      const filebuffer = fs.readFileSync(dbPath);
+      wasmDb = new SQL.Database(filebuffer);
+    } else {
+      const dbDir = path.dirname(dbPath);
+      if (!fs.existsSync(dbDir)) fs.mkdirSync(dbDir, { recursive: true });
+      wasmDb = new SQL.Database();
+      saveWasmDb();
+    }
+    isWasm = true;
+    db = {
+      exec: (sql) => {
+        wasmDb.run(sql);
+        saveWasmDb();
+      },
+      prepare: (sql) => {
+        return {
+          run: (...params) => {
+            wasmDb.run(sql, params);
+            saveWasmDb();
+            const res = wasmDb.exec('SELECT last_insert_rowid() as id, changes() as changes');
+            const id = res?.[0]?.values?.[0]?.[0] || 0;
+            const changes = res?.[0]?.values?.[0]?.[1] || 0;
+            return { lastInsertRowid: id, changes };
+          },
+          get: (...params) => {
+            const stmt = wasmDb.prepare(sql);
+            stmt.bind(params);
+            if (stmt.step()) {
+              const row = stmt.getAsObject();
+              stmt.free();
+              return row;
+            }
+            stmt.free();
+            return null;
+          },
+          all: (...params) => {
+            const stmt = wasmDb.prepare(sql);
+            stmt.bind(params);
+            const rows = [];
+            while (stmt.step()) {
+              rows.push(stmt.getAsObject());
+            }
+            stmt.free();
+            return rows;
+          }
+        };
+      }
+    };
+  } catch (err) {
+    console.error('[Database Fatal] Failed to initialize SQLite backend:', err.message);
+    throw err;
+  }
+}
 
 console.log(`Connected to the SQLite database at: ${dbPath}`);
 

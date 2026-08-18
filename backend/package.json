@@ -26,6 +26,7 @@
     "puppeteer-extra-plugin-stealth": "^2.11.2",
     "qrcode": "^1.5.4",
     "razorpay": "^2.9.8",
+    "sql.js": "^1.14.2",
     "whatsapp-web.js": "^1.26.0",
     "xlsx": "^0.18.5"
   },
