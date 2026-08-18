@@ -14,8 +14,9 @@ const dbPath = getDatabasePath();
 let db = null;
 let isWasm = false;
 let wasmDb = null;
+let saveWasmTimer = null;
 
-function saveWasmDb() {
+export function saveWasmDb() {
   if (isWasm && wasmDb) {
     try {
       const data = wasmDb.export();
@@ -26,6 +27,20 @@ function saveWasmDb() {
     }
   }
 }
+
+export function scheduleSaveWasmDb() {
+  if (isWasm && wasmDb) {
+    if (saveWasmTimer) clearTimeout(saveWasmTimer);
+    saveWasmTimer = setTimeout(() => {
+      saveWasmDb();
+    }, 150);
+  }
+}
+
+// Ensure database is saved on process exit
+process.on('exit', () => {
+  saveWasmDb();
+});
 
 // 1. Try native node:sqlite (Node 22+)
 try {
@@ -75,13 +90,13 @@ if (!db) {
     db = {
       exec: (sql) => {
         wasmDb.run(sql);
-        saveWasmDb();
+        scheduleSaveWasmDb();
       },
       prepare: (sql) => {
         return {
           run: (...params) => {
             wasmDb.run(sql, params);
-            saveWasmDb();
+            scheduleSaveWasmDb();
             const res = wasmDb.exec('SELECT last_insert_rowid() as id, changes() as changes');
             const id = res?.[0]?.values?.[0]?.[0] || 0;
             const changes = res?.[0]?.values?.[0]?.[1] || 0;
@@ -149,7 +164,7 @@ export const all = (sql, params = []) => {
   }
 };
 
-function initDb() {
+export function initDb() {
   // 0. Users Table
   db.exec(`
     CREATE TABLE IF NOT EXISTS users (
@@ -178,6 +193,12 @@ function initDb() {
       sent_count INTEGER DEFAULT 0,
       failed_count INTEGER DEFAULT 0,
       duration INTEGER DEFAULT 0,
+      scheduled_at TEXT,
+      report_path TEXT,
+      session_mode TEXT DEFAULT 'auto_split',
+      session_name TEXT DEFAULT 'default',
+      auto_fragment TEXT DEFAULT 'false',
+      fragment_max_per_window INTEGER DEFAULT 25,
       created_at TEXT DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
     )
@@ -199,6 +220,8 @@ function initDb() {
       error_reason TEXT,
       sent_at TEXT,
       row_index INTEGER,
+      variant_name TEXT DEFAULT 'A',
+      sent_via_session TEXT,
       FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
       FOREIGN KEY (campaign_id) REFERENCES campaigns(id) ON DELETE CASCADE
     )
