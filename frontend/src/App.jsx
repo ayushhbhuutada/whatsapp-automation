@@ -497,35 +497,6 @@ export default function App() {
             </div>
           </div>
 
-          {/* Mode Switcher */}
-          <div className="flex bg-slate-950 p-1 rounded-xl border border-slate-800 text-xs font-semibold">
-            <button
-              onClick={() => { setAuthMode('license'); setAuthError(''); setAuthSuccess(''); }}
-              className={`flex-1 py-2.5 rounded-lg transition-all flex items-center justify-center gap-1.5 ${
-                authMode === 'license' ? 'bg-emerald-500 text-white shadow-md' : 'text-slate-400 hover:text-white'
-              }`}
-            >
-              <ShieldCheck size={14} />
-              <span>Activate License</span>
-            </button>
-            <button
-              onClick={() => { setAuthMode('login'); setAuthError(''); setAuthSuccess(''); }}
-              className={`flex-1 py-2.5 rounded-lg transition-all ${
-                authMode === 'login' ? 'bg-emerald-500 text-white shadow-md' : 'text-slate-400 hover:text-white'
-              }`}
-            >
-              Admin Login
-            </button>
-            <button
-              onClick={() => { setAuthMode('register'); setAuthError(''); setAuthSuccess(''); }}
-              className={`flex-1 py-2.5 rounded-lg transition-all ${
-                authMode === 'register' ? 'bg-emerald-500 text-white shadow-md' : 'text-slate-400 hover:text-white'
-              }`}
-            >
-              Create Account
-            </button>
-          </div>
-
           {authError && (
             <div className="p-3 bg-rose-500/10 border border-rose-500/20 rounded-xl text-rose-400 text-xs font-medium flex items-center gap-2">
               <AlertTriangle size={16} className="shrink-0" />
@@ -541,110 +512,59 @@ export default function App() {
           )}
 
           <form onSubmit={handleAuthSubmit} className="space-y-4">
-            {authMode === 'license' && (
-              <div className="space-y-4">
-                {/* Hardware Machine ID Detection Card */}
-                <div className="p-3.5 bg-slate-950/80 border border-slate-800 rounded-xl space-y-2">
-                  <div className="flex items-center justify-between">
-                    <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
-                      <Smartphone size={13} className="text-emerald-400" />
-                      Your Hardware Machine ID
-                    </span>
-                    <span className="text-[10px] text-emerald-400 font-mono bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">Auto-Detected</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="text"
-                      readOnly
-                      value={detectedMachineId || 'Connecting to engine...'}
-                      className={`flex-1 px-3 py-2 bg-slate-900 border border-slate-800 rounded-lg font-mono text-xs select-all focus:outline-none ${detectedMachineId ? 'text-emerald-300' : 'text-slate-500 animate-pulse'}`}
-                    />
-                    <button
-                      type="button"
-                      onClick={handleCopyMachineId}
-                      className="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg text-xs font-bold transition-colors flex items-center gap-1 shrink-0"
-                    >
-                      {copiedMachineId ? <Check size={14} className="text-emerald-400" /> : <Copy size={14} />}
-                      <span>{copiedMachineId ? 'Copied!' : 'Copy ID'}</span>
-                    </button>
-                  </div>
-                  <p className="text-[10px] text-slate-500">
-                    Your license key automatically binds to this hardware on first activation.
-                  </p>
+            <div className="space-y-4">
+              {/* Hardware Machine ID Detection Card */}
+              <div className="p-3.5 bg-slate-950/80 border border-slate-800 rounded-xl space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+                    <Smartphone size={13} className="text-emerald-400" />
+                    Your Hardware Machine ID
+                  </span>
+                  <span className="text-[10px] text-emerald-400 font-mono bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">Auto-Detected</span>
                 </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">
-                    Paste Commercial License Key (WALIC...)
-                  </label>
-                  <textarea
-                    rows={3}
-                    required
-                    placeholder="WALIC.eyJjdXN0b21lciI6IkNsaWVudCIsIm5vZGVMb2NrSWQiOiJXQS1XSU4t..."
-                    value={authFormData.licenseKey}
-                    onChange={(e) => setAuthFormData({ ...authFormData, licenseKey: e.target.value })}
-                    className="w-full px-4 py-3 bg-slate-950 border border-slate-800 rounded-xl text-slate-200 focus:outline-none focus:border-emerald-500 transition-colors font-mono text-xs"
+                <div className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    readOnly
+                    value={detectedMachineId || 'Connecting to engine...'}
+                    className={`flex-1 px-3 py-2 bg-slate-900 border border-slate-800 rounded-lg font-mono text-xs select-all focus:outline-none ${detectedMachineId ? 'text-emerald-300' : 'text-slate-500 animate-pulse'}`}
                   />
+                  <button
+                    type="button"
+                    onClick={handleCopyMachineId}
+                    className="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg text-xs font-bold transition-colors flex items-center gap-1 shrink-0"
+                  >
+                    {copiedMachineId ? <Check size={14} className="text-emerald-400" /> : <Copy size={14} />}
+                    <span>{copiedMachineId ? 'Copied!' : 'Copy ID'}</span>
+                  </button>
                 </div>
-
-                <button
-                  type="submit"
-                  className="w-full py-3.5 bg-emerald-500 hover:bg-emerald-600 font-bold text-white rounded-xl shadow-lg shadow-emerald-500/20 transition-all text-sm flex items-center justify-center gap-2"
-                >
-                  <ShieldCheck size={18} />
-                  <span>Activate Commercial License</span>
-                </button>
+                <p className="text-[10px] text-slate-500">
+                  Provide this Machine ID to generate or bind your commercial license key.
+                </p>
               </div>
-            )}
 
-            {authMode === 'register' && (
               <div>
-                <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">Full Name</label>
-                <input
-                  type="text"
+                <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">
+                  Paste Commercial License Key (WALIC...)
+                </label>
+                <textarea
+                  rows={3}
                   required
-                  placeholder="John Doe"
-                  value={authFormData.name}
-                  onChange={(e) => setAuthFormData({ ...authFormData, name: e.target.value })}
-                  className="w-full px-4 py-3 bg-slate-950 border border-slate-800 rounded-xl text-slate-200 focus:outline-none focus:border-emerald-500 transition-colors text-sm"
+                  placeholder="WALIC.eyJjdXN0b21lciI6IkNsaWVudCIsIm5vZGVMb2NrSWQiOiJXQS1XSU4t..."
+                  value={authFormData.licenseKey}
+                  onChange={(e) => setAuthFormData({ ...authFormData, licenseKey: e.target.value })}
+                  className="w-full px-4 py-3 bg-slate-950 border border-slate-800 rounded-xl text-slate-200 focus:outline-none focus:border-emerald-500 transition-colors font-mono text-xs"
                 />
               </div>
-            )}
 
-            {(authMode === 'login' || authMode === 'register') && (
-              <>
-                <div>
-                  <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">Email Address</label>
-                  <input
-                    type="email"
-                    required
-                    placeholder="name@company.com"
-                    value={authFormData.email}
-                    onChange={(e) => setAuthFormData({ ...authFormData, email: e.target.value })}
-                    className="w-full px-4 py-3 bg-slate-950 border border-slate-800 rounded-xl text-slate-200 focus:outline-none focus:border-emerald-500 transition-colors text-sm"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">Password</label>
-                  <input
-                    type="password"
-                    required
-                    placeholder="••••••••"
-                    value={authFormData.password}
-                    onChange={(e) => setAuthFormData({ ...authFormData, password: e.target.value })}
-                    className="w-full px-4 py-3 bg-slate-950 border border-slate-800 rounded-xl text-slate-200 focus:outline-none focus:border-emerald-500 transition-colors text-sm"
-                  />
-                </div>
-
-                <button
-                  type="submit"
-                  className="w-full py-3 bg-emerald-500 hover:bg-emerald-600 font-semibold text-white rounded-xl shadow-lg shadow-emerald-500/20 transition-all text-sm mt-2"
-                >
-                  {authMode === 'login' ? 'Sign In to Dashboard' : 'Create Desktop Account'}
-                </button>
-              </>
-            )}
+              <button
+                type="submit"
+                className="w-full py-3.5 bg-emerald-500 hover:bg-emerald-600 font-bold text-white rounded-xl shadow-lg shadow-emerald-500/20 transition-all text-sm flex items-center justify-center gap-2 cursor-pointer"
+              >
+                <ShieldCheck size={18} />
+                <span>Activate License & Launch Workspace</span>
+              </button>
+            </div>
           </form>
         </div>
       </div>
