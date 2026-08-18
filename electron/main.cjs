@@ -295,7 +295,7 @@ function createWindow(port) {
     minHeight: 700,
     title: 'WhatsApp Automation Pro',
     backgroundColor: '#020617',
-    show: true,
+    show: false, // Keep hidden until fully loaded & painted
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
@@ -315,16 +315,21 @@ function createWindow(port) {
     mainWindow.loadURL(`http://127.0.0.1:${port}`);
   }
 
-  // Gracefully dismiss Splash screen once Main Window is shown
-  if (splashWindow && !splashWindow.isDestroyed()) {
-    try { splashWindow.close(); } catch (e) {}
-  }
-
-  mainWindow.once('ready-to-show', () => {
+  // Smooth transition: Reveal Main Window only when ready to paint, then dismiss Splash
+  let hasShown = false;
+  const revealMainWindow = () => {
+    if (hasShown || !mainWindow || mainWindow.isDestroyed()) return;
+    hasShown = true;
+    mainWindow.show();
+    mainWindow.focus();
     if (splashWindow && !splashWindow.isDestroyed()) {
       try { splashWindow.close(); } catch (e) {}
     }
-  });
+  };
+
+  mainWindow.once('ready-to-show', revealMainWindow);
+  // Fallback reveal in case ready-to-show is delayed by system compositor
+  setTimeout(revealMainWindow, 1800);
 
   // Guard against multiple close events firing (prevents double-quit bug)
   let isClosing = false;

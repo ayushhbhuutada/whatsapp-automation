@@ -9,8 +9,60 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Outfit:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet" />
   </head>
-  <body>
-    <div id="root"></div>
+  <body style="margin: 0; background-color: #020617; color: #f8fafc; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
+    <div id="root">
+      <div id="app-preloader" style="position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; background: radial-gradient(circle at 50% 30%, #0f172a 0%, #020617 75%); z-index: 99999; user-select: none;">
+        <style>
+          @keyframes appLogoFloat {
+            0%, 100% { transform: translateY(0px) scale(1); }
+            50% { transform: translateY(-5px) scale(1.02); }
+          }
+          @keyframes appProgressSlide {
+            0% { left: -45%; width: 40%; }
+            50% { left: 25%; width: 55%; }
+            100% { left: 105%; width: 35%; }
+          }
+          @keyframes appPulseGlow {
+            0%, 100% { opacity: 0.6; transform: scale(1); }
+            50% { opacity: 1; transform: scale(1.08); }
+          }
+        </style>
+        
+        <!-- Logo Card -->
+        <div style="position: relative; margin-bottom: 24px;">
+          <div style="position: absolute; inset: -8px; background: radial-gradient(circle, rgba(16,185,129,0.35) 0%, transparent 70%); filter: blur(12px); border-radius: 28px; animation: appPulseGlow 2.5s ease-in-out infinite;"></div>
+          <div style="position: relative; width: 68px; height: 68px; background: linear-gradient(135deg, #10b981 0%, #059669 100%); border-radius: 20px; display: flex; align-items: center; justify-content: center; box-shadow: 0 12px 30px -4px rgba(16,185,129,0.4), inset 0 1px 1px rgba(255,255,255,0.4); animation: appLogoFloat 3s ease-in-out infinite;">
+            <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="transform: rotate(45deg); margin-top: -2px; margin-left: -2px;">
+              <line x1="22" y1="2" x2="11" y2="13"></line>
+              <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+            </svg>
+          </div>
+        </div>
+
+        <!-- App Titles -->
+        <div style="text-align: center; margin-bottom: 24px;">
+          <h1 style="margin: 0 0 6px 0; font-size: 20px; font-weight: 800; color: #ffffff; letter-spacing: -0.4px;">
+            WhatsApp Automator Pro
+          </h1>
+          <div style="display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; background: rgba(16,185,129,0.12); border: 1px solid rgba(16,185,129,0.25); border-radius: 9999px;">
+            <span style="width: 6px; height: 6px; border-radius: 50%; background: #10b981; display: inline-block;"></span>
+            <span style="font-size: 11px; font-weight: 700; color: #34d399; letter-spacing: 0.8px; text-transform: uppercase;">
+              Commercial Edition
+            </span>
+          </div>
+        </div>
+
+        <!-- Progress Bar -->
+        <div style="width: 280px; height: 5px; background: rgba(30, 41, 59, 0.9); border-radius: 9999px; overflow: hidden; position: relative; box-shadow: inset 0 1px 2px rgba(0,0,0,0.6); margin-bottom: 14px; border: 1px solid rgba(51, 65, 85, 0.5);">
+          <div style="position: absolute; top: 0; bottom: 0; background: linear-gradient(90deg, #059669, #10b981, #34d399); border-radius: 9999px; animation: appProgressSlide 1.6s infinite cubic-bezier(0.4, 0, 0.2, 1); box-shadow: 0 0 12px rgba(16,185,129,0.6);"></div>
+        </div>
+
+        <!-- Dynamic Status Message -->
+        <div style="font-size: 12px; color: #94a3b8; font-weight: 500; letter-spacing: 0.2px;">
+          Loading workspace & automation engine...
+        </div>
+      </div>
+    </div>
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>
