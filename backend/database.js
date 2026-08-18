@@ -42,7 +42,11 @@ try {
 if (!db) {
   try {
     const initSqlJs = require('sql.js');
-    const SQL = await initSqlJs();
+    let wasmPath = undefined;
+    try {
+      wasmPath = require.resolve('sql.js/dist/sql-wasm.wasm');
+    } catch (e) {}
+    const SQL = await initSqlJs(wasmPath ? { locateFile: () => wasmPath } : undefined);
     if (fs.existsSync(dbPath)) {
       const filebuffer = fs.readFileSync(dbPath);
       wasmDb = new SQL.Database(filebuffer);

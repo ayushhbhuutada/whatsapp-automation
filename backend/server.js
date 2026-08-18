@@ -85,10 +85,15 @@ app.use('/attachments', express.static(attachmentsDir));
 // Resolve frontend dist directory across all production packaging environments
 function getFrontendDistDir() {
   const possiblePaths = [
-    path.resolve(__dirname, '../frontend/dist'),
+    process.resourcesPath ? path.join(process.resourcesPath, 'app', 'frontend', 'dist') : null,
+    process.resourcesPath ? path.join(process.resourcesPath, 'frontend', 'dist') : null,
     process.resourcesPath ? path.join(process.resourcesPath, 'app.asar.unpacked', 'frontend', 'dist') : null,
     process.resourcesPath ? path.join(process.resourcesPath, 'app.asar', 'frontend', 'dist') : null,
+    path.resolve(__dirname, '../frontend/dist'),
     path.resolve(__dirname, '../../frontend/dist'),
+    path.resolve(__dirname, 'frontend/dist'),
+    path.resolve(process.cwd(), 'frontend/dist'),
+    path.resolve(process.cwd(), 'resources/app/frontend/dist'),
     path.resolve(__dirname, 'public')
   ].filter(Boolean);
 

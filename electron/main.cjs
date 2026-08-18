@@ -273,7 +273,7 @@ function createWindow(port) {
   });
 
   mainWindow.setMenuBarVisibility(false);
-  mainWindow.loadURL(`http://localhost:${port}`);
+  mainWindow.loadURL(`http://127.0.0.1:${port}`);
 
   // Gracefully transition from Splash screen to Main Window
   mainWindow.once('ready-to-show', () => {
@@ -302,11 +302,22 @@ function createWindow(port) {
     }
   });
 
+  // Strict visibility guarantee to prevent blank/hidden windows on other PCs
+  setTimeout(() => {
+    if (mainWindow && !mainWindow.isDestroyed() && !mainWindow.isVisible()) {
+      mainWindow.show();
+      mainWindow.focus();
+    }
+    if (splashWindow && !splashWindow.isDestroyed()) {
+      try { splashWindow.close(); } catch (e) {}
+    }
+  }, 1200);
+
   mainWindow.webContents.on('did-fail-load', (event, errorCode, errorDescription, validatedURL) => {
     console.warn(`[Electron] Load failure (${errorCode}: ${errorDescription}) at ${validatedURL}. Retrying...`);
     setTimeout(() => {
       if (mainWindow && !mainWindow.isDestroyed()) {
-        mainWindow.loadURL(`http://localhost:${port}`);
+        mainWindow.loadURL(`http://127.0.0.1:${port}`);
       }
     }, 1200);
   });
@@ -382,9 +393,9 @@ if (app) {
 
     // 4. Verify server readiness
     updateSplashStatus('Connecting to automation engine...');
-    const isReady = await checkServerReady(`http://localhost:${selectedPort}/api/health`, 25);
+    const isReady = await checkServerReady(`http://127.0.0.1:${selectedPort}/api/health`, 30);
     if (!isReady) {
-      await checkServerReady(`http://localhost:${selectedPort}/api/anti-ban/health`, 15);
+      await checkServerReady(`http://127.0.0.1:${selectedPort}/api/anti-ban/health`, 15);
     }
 
     // 5. Open workspace window
