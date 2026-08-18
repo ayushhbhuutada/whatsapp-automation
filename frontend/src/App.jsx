@@ -6164,11 +6164,18 @@ function PublicLandingView({
                 <span>Download Windows Installer (.EXE)</span>
               </a>
               <a
+                href="https://github.com/ayushhbhuutada/whatsapp-automation/releases/download/v1.0.0/WhatsAppAutomation-Portable-Windows.zip"
+                className="w-full sm:w-auto px-6 py-4 bg-slate-900 hover:bg-slate-800 border border-slate-700 text-slate-200 text-sm font-bold rounded-xl transition-all flex items-center justify-center gap-2 text-center"
+              >
+                <Download size={18} className="text-emerald-400" />
+                <span>Download Portable (.ZIP)</span>
+              </a>
+              <a
                 href="#pricing"
-                className="w-full sm:w-auto px-8 py-4 bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-200 text-sm font-bold rounded-xl transition-all flex items-center justify-center gap-2 text-center"
+                className="w-full sm:w-auto px-6 py-4 bg-slate-900/60 hover:bg-slate-800 border border-slate-800 text-slate-200 text-sm font-bold rounded-xl transition-all flex items-center justify-center gap-2 text-center"
               >
                 <Zap size={18} className="text-amber-400" />
-                <span>View Pricing & Buy License</span>
+                <span>View Pricing</span>
               </a>
             </div>
             <p className="text-[11px] text-slate-400 flex items-center gap-1.5 mt-1">
