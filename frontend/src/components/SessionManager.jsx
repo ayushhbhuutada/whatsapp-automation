@@ -7,6 +7,11 @@ const getApiServer = () => {
   
   const protocol = window.location.protocol;
   const hostname = window.location.hostname || '127.0.0.1';
+
+  // If running in Electron via file:// protocol or origin is 'null'
+  if (protocol === 'file:' || !window.location.origin || window.location.origin === 'null') {
+    return 'http://127.0.0.1:5000';
+  }
   if (window.location.port === '5173') {
     return `${protocol}//${hostname}:5000`;
   }

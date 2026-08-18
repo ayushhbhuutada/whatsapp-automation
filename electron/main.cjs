@@ -300,6 +300,8 @@ function createWindow(port) {
       nodeIntegration: false,
       contextIsolation: true,
       sandbox: false,
+      webSecurity: false,
+      allowRunningInsecureContent: true,
       preload: preloadPath
     }
   });
