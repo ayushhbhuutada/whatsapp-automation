@@ -1,7 +1,14 @@
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
-import XLSX from 'xlsx';
+let _XLSX = null;
+async function getXLSX() {
+  if (!_XLSX) {
+    const mod = await import('xlsx');
+    _XLSX = mod.default || mod;
+  }
+  return _XLSX;
+}
 import { run, get, all } from '../database.js';
 import { updateGoogleSheetStatus } from './googleSheets.js';
 import { openwaService } from './openwaService.js';
@@ -309,6 +316,7 @@ class AutomationRunner {
         c.message_template ? (c.message_template.length > 100 ? c.message_template.substring(0, 100) + '...' : c.message_template) : ''
       ]);
 
+      const XLSX = await getXLSX();
       const wb = XLSX.utils.book_new();
 
       const wsSummary = XLSX.utils.aoa_to_sheet(summaryData);

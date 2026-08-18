@@ -326,7 +326,11 @@ function createWindow(port) {
     }
   });
 
+  // Guard against multiple close events firing (prevents double-quit bug)
+  let isClosing = false;
   mainWindow.on('close', () => {
+    if (isClosing) return;
+    isClosing = true;
     if (app) {
       app.isQuitting = true;
       if (serverProcess) {
@@ -387,11 +391,14 @@ if (app) {
       selectedPort = 5000;
     }
 
-    // 3. Start local automation backend server
-    updateSplashStatus('Starting local automation engine...');
-    await startBackendServer(selectedPort);
+    // 3. Start local automation backend server IN BACKGROUND (non-blocking)
+    // Window opens immediately; frontend retries API calls until backend is ready.
+    updateSplashStatus('Starting automation engine in background...');
+    startBackendServer(selectedPort).catch((err) => {
+      console.error('[Electron Main] Backend startup error:', err);
+    });
 
-    // 4. Open workspace window immediately
+    // 4. Open workspace window immediately (no need to wait for backend)
     updateSplashStatus('Opening workspace interface...');
     createWindow(selectedPort);
     createTray();

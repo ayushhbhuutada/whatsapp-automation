@@ -105,16 +105,26 @@ export default function App() {
   };
 
   // Authentication & License State
-  const defaultAdmin = { id: 1, name: 'Admin', email: 'admin@local.host', max_login_sessions: 1 };
+  // User and token are null by default — app always shows license gate on first run.
+  // Session is only restored from localStorage if a real license-activated token is stored.
   const [user, setUser] = useState(() => {
     try {
       const saved = localStorage.getItem('user');
-      return saved ? JSON.parse(saved) : defaultAdmin;
+      const savedToken = localStorage.getItem('token');
+      // Only restore session if token is a real activation token (not a dev bypass)
+      if (saved && savedToken && savedToken !== 'dev-bypass-token') {
+        return JSON.parse(saved);
+      }
+      return null;
     } catch (_e) {
-      return defaultAdmin;
+      return null;
     }
   });
-  const [token, setToken] = useState(() => localStorage.getItem('token') || 'dev-bypass-token');
+  const [token, setToken] = useState(() => {
+    const savedToken = localStorage.getItem('token');
+    // Reject dev-bypass token — only honor real license activation tokens
+    return (savedToken && savedToken !== 'dev-bypass-token') ? savedToken : null;
+  });
   const [authMode, setAuthMode] = useState('license');
   const [authFormData, setAuthFormData] = useState({ name: '', email: '', password: '', licenseKey: '' });
   const [detectedMachineId, setDetectedMachineId] = useState('');
@@ -131,12 +141,24 @@ export default function App() {
   const [adminLoginError, setAdminLoginError] = useState('');
 
   useEffect(() => {
-    // Fetch detected machine ID for instant activation
-    axios.get(`${API_BASE}/license/machine-id`)
-      .then(res => {
-        if (res.data?.machineId) setDetectedMachineId(res.data.machineId);
-      })
-      .catch(() => {});
+    // Backend may still be loading when the window first opens.
+    // Retry fetching machine ID until the backend is ready (max 60 retries = ~2 minutes).
+    let attempts = 0;
+    let retryTimer = null;
+    const fetchMachineId = () => {
+      axios.get(`${API_BASE}/license/machine-id`)
+        .then(res => {
+          if (res.data?.machineId) setDetectedMachineId(res.data.machineId);
+        })
+        .catch(() => {
+          attempts++;
+          if (attempts < 60) {
+            retryTimer = setTimeout(fetchMachineId, 2000);
+          }
+        });
+    };
+    fetchMachineId();
+    return () => { if (retryTimer) clearTimeout(retryTimer); };
   }, []);
 
   // Set axios auth header
@@ -225,16 +247,19 @@ export default function App() {
   }, [token]);
 
   // Poll automation status and active campaign details
+  // When running: poll every 3s; When idle: poll every 10s to save RAM/CPU
   useEffect(() => {
-    const intervalTime = (automationStatus.status === 'Running' || automationStatus.status === 'Paused') ? 2000 : 4000;
+    const intervalTime = (automationStatus.status === 'Running' || automationStatus.status === 'Paused') ? 3000 : 10000;
     
     pollRef.current = setInterval(() => {
       fetchAutomationStatus();
       fetchCampaigns();
-      fetchHealthData();
-      if (selectedCampaignId) {
-        fetchContacts(selectedCampaignId);
-        fetchLogs(selectedCampaignId);
+      if (automationStatus.status === 'Running') {
+        fetchHealthData();
+        if (selectedCampaignId) {
+          fetchContacts(selectedCampaignId);
+          fetchLogs(selectedCampaignId);
+        }
       }
     }, intervalTime);
 
@@ -531,8 +556,8 @@ export default function App() {
                     <input
                       type="text"
                       readOnly
-                      value={detectedMachineId || 'Detecting hardware...'}
-                      className="flex-1 px-3 py-2 bg-slate-900 border border-slate-800 rounded-lg text-emerald-300 font-mono text-xs select-all focus:outline-none"
+                      value={detectedMachineId || 'Connecting to engine...'}
+                      className={`flex-1 px-3 py-2 bg-slate-900 border border-slate-800 rounded-lg font-mono text-xs select-all focus:outline-none ${detectedMachineId ? 'text-emerald-300' : 'text-slate-500 animate-pulse'}`}
                     />
                     <button
                       type="button"
