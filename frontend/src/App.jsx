@@ -6156,6 +6156,9 @@ function PublicLandingView({
 
             <a
               href={downloadUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              download="WhatsAppAutomationSetup.exe"
               className="px-4 py-2 bg-emerald-500 hover:bg-emerald-600 font-bold text-white text-xs rounded-xl shadow-lg shadow-emerald-500/20 transition-all flex items-center gap-1.5"
             >
               <Download size={14} />
@@ -6187,6 +6190,9 @@ function PublicLandingView({
             <div className="flex flex-col sm:flex-row items-center justify-center gap-4 w-full">
               <a
                 href={downloadUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                download="WhatsAppAutomationSetup.exe"
                 className="w-full sm:w-auto px-8 py-4 bg-emerald-500 hover:bg-emerald-600 font-bold text-white text-sm rounded-xl shadow-xl shadow-emerald-500/25 transition-all flex items-center justify-center gap-2 text-center"
               >
                 <Download size={18} />
@@ -6194,11 +6200,13 @@ function PublicLandingView({
               </a>
 
               <a
-                href="#pricing"
+                href="https://github.com/ayushhbhuutada/whatsapp-automation/releases/tag/v1.0.0"
+                target="_blank"
+                rel="noopener noreferrer"
                 className="w-full sm:w-auto px-6 py-4 bg-slate-900/60 hover:bg-slate-800 border border-slate-800 text-slate-200 text-sm font-bold rounded-xl transition-all flex items-center justify-center gap-2 text-center"
               >
-                <Zap size={18} className="text-amber-400" />
-                <span>View Pricing</span>
+                <ExternalLink size={18} className="text-cyan-400" />
+                <span>GitHub Releases (Mirror)</span>
               </a>
             </div>
             <p className="text-[11px] text-slate-400 flex items-center gap-1.5 mt-1">
