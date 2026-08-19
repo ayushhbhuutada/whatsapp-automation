@@ -151,11 +151,22 @@ export default function App() {
   const [adminLoginError, setAdminLoginError] = useState('');
 
   useEffect(() => {
-    // Backend may still be loading when the window first opens.
-    // Retry fetching machine ID until the backend is ready (max 60 retries = ~2 minutes).
     let attempts = 0;
     let retryTimer = null;
-    const fetchMachineId = () => {
+    const fetchMachineId = async () => {
+      // 1. Try direct Electron IPC bridge first if available
+      if (window.electronAPI?.getMachineId) {
+        try {
+          const res = await window.electronAPI.getMachineId();
+          const mId = typeof res === 'string' ? res : (res?.machineId || '');
+          if (mId) {
+            setDetectedMachineId(mId);
+            return;
+          }
+        } catch (_e) {}
+      }
+
+      // 2. Try local backend API
       axios.get(`${API_BASE}/license/machine-id`)
         .then(res => {
           if (res.data?.machineId) setDetectedMachineId(res.data.machineId);
@@ -3507,7 +3518,7 @@ function ProDesktopLicenseManager() {
       if (window.electronAPI?.getMachineId) {
         try {
           const res = await window.electronAPI.getMachineId();
-          if (res?.machineId) mId = res.machineId;
+          mId = typeof res === 'string' ? res : (res?.machineId || '');
         } catch (_e) {}
       }
       if (!mId) {

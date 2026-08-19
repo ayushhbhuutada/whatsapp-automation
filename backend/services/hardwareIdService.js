@@ -1,6 +1,12 @@
 import { execSync } from 'node:child_process';
 import crypto from 'node:crypto';
+import fs from 'node:fs';
+import path from 'node:path';
 import os from 'node:os';
+import { fileURLToPath } from 'node:url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const INTERNAL_PEPPER = 'WA_AUTO_HARDWARE_NODE_LOCK_v1_2026';
 
@@ -8,61 +14,121 @@ let cachedProfile = null;
 let cachedMachineId = null;
 
 /**
- * Extracts primary physical MAC address
+ * Resolves paths for permanent machine ID anchor files
  */
-function getPrimaryMacAddress() {
-  try {
-    const ifaces = os.networkInterfaces();
-    for (const name of Object.keys(ifaces)) {
-      const list = ifaces[name] || [];
-      const physical = list.find(i => !i.internal && i.mac && i.mac !== '00:00:00:00:00:00');
-      if (physical) {
-        return physical.mac.trim().toLowerCase();
+function getAnchorFilePaths() {
+  const paths = [];
+
+  // Primary: %APPDATA%/WhatsAppAutomation/machine_id.anchor
+  const appData = process.env.APPDATA;
+  if (appData) {
+    const dir = path.join(appData, 'WhatsAppAutomation');
+    try {
+      if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true });
       }
-    }
-  } catch (e) {
-    // ignore
+      paths.push(path.join(dir, 'machine_id.anchor'));
+    } catch (e) {}
   }
-  return '00:00:00:00:00:00';
+
+  // Fallback: <project_root>/database/machine_id.anchor
+  try {
+    const dbDir = path.resolve(__dirname, '../../database');
+    if (!fs.existsSync(dbDir)) {
+      fs.mkdirSync(dbDir, { recursive: true });
+    }
+    paths.push(path.join(dbDir, 'machine_id.anchor'));
+  } catch (e) {}
+
+  return paths;
 }
 
 /**
- * Queries Windows hardware attributes via PowerShell CIM commands
+ * Loads anchored machine ID from persistent disk storage
+ */
+function loadAnchoredMachineId() {
+  const anchorPaths = getAnchorFilePaths();
+  for (const fpath of anchorPaths) {
+    try {
+      if (fs.existsSync(fpath)) {
+        const content = fs.readFileSync(fpath, 'utf8').trim();
+        if (content && /^WA-WIN-[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}$/.test(content)) {
+          return content;
+        }
+      }
+    } catch (e) {}
+  }
+  return null;
+}
+
+/**
+ * Saves machine ID to persistent disk anchors
+ */
+function saveAnchoredMachineId(machineId) {
+  if (!machineId || !/^WA-WIN-[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}$/.test(machineId)) return;
+  const anchorPaths = getAnchorFilePaths();
+  for (const fpath of anchorPaths) {
+    try {
+      const dir = path.dirname(fpath);
+      if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true });
+      }
+      fs.writeFileSync(fpath, machineId, 'utf8');
+    } catch (e) {}
+  }
+}
+
+/**
+ * Queries Windows MachineGuid directly from registry (ultra-fast, < 5ms)
+ */
+function getWindowsMachineGuid() {
+  if (process.platform === 'win32') {
+    try {
+      const out = execSync('reg query "HKLM\\SOFTWARE\\Microsoft\\Cryptography" /v MachineGuid', {
+        encoding: 'utf8',
+        timeout: 3000,
+        stdio: ['ignore', 'pipe', 'ignore']
+      });
+      const match = out.match(/MachineGuid\s+REG_SZ\s+([a-fA-F0-9-]+)/i);
+      if (match && match[1]) {
+        return match[1].trim();
+      }
+    } catch (_e) {}
+  }
+  return '';
+}
+
+/**
+ * Queries immutable Windows hardware attributes
  */
 function queryWindowsHardware() {
   const hw = {
     uuid: '',
     cpu: '',
-    disk: '',
-    machineGuid: ''
+    machineGuid: getWindowsMachineGuid()
   };
 
   if (process.platform === 'win32') {
     try {
-      const psCommand = `powershell -NoProfile -NonInteractive -Command "[PSCustomObject]@{ uuid=(Get-CimInstance Win32_ComputerSystemProduct).UUID; cpu=(Get-CimInstance Win32_Processor).ProcessorId; disk=(Get-CimInstance Win32_DiskDrive | Select-Object -First 1).SerialNumber; guid=(Get-ItemPropertyValue 'HKLM:\\SOFTWARE\\Microsoft\\Cryptography' 'MachineGuid') } | ConvertTo-Json -Compress"`;
+      const psCommand = `powershell -NoProfile -NonInteractive -Command "[PSCustomObject]@{ uuid=(Get-CimInstance Win32_ComputerSystemProduct).UUID; cpu=(Get-CimInstance Win32_Processor | Select-Object -First 1).ProcessorId } | ConvertTo-Json -Compress"`;
       const output = execSync(psCommand, { encoding: 'utf8', timeout: 6000, stdio: ['ignore', 'pipe', 'ignore'] }).trim();
       if (output) {
         const parsed = JSON.parse(output);
         hw.uuid = (parsed.uuid || '').trim();
         hw.cpu = (parsed.cpu || '').trim();
-        hw.disk = (parsed.disk || '').trim();
-        hw.machineGuid = (parsed.guid || '').trim();
       }
     } catch (err) {
-      // CIM / PowerShell failed or timed out; fall back to individual or registry queries
+      // Fallback to wmic or environment if powershell is busy
     }
   }
 
-  // Fallback / supplement individual empty fields
+  // Immutable fallbacks
   if (!hw.uuid) {
     hw.uuid = os.hostname() || 'DEFAULT_SYS_UUID';
   }
   if (!hw.cpu) {
     const cpus = os.cpus();
     hw.cpu = (cpus && cpus.length > 0 && cpus[0].model) ? cpus[0].model : `${os.arch()}_${os.platform()}`;
-  }
-  if (!hw.disk) {
-    hw.disk = process.env.SYSTEMDRIVE || 'C:';
   }
   if (!hw.machineGuid) {
     hw.machineGuid = `${os.platform()}_${os.userInfo().username || 'USER'}`;
@@ -72,25 +138,25 @@ function queryWindowsHardware() {
 }
 
 /**
- * Builds deterministic hardware profile and machine ID
+ * Builds deterministic hardware profile and machine ID with permanent disk anchoring
  * @param {Object} [options]
  * @param {boolean} [options.refresh=false]
- * @returns {{ uuid: string, cpu: string, disk: string, machineGuid: string, mac: string, rawFingerprint: string, machineId: string, hash: string }}
+ * @returns {{ uuid: string, cpu: string, machineGuid: string, rawFingerprint: string, machineId: string, hash: string }}
  */
 export function getHardwareProfile(options = {}) {
   if (cachedProfile && !options.refresh) {
     return cachedProfile;
   }
 
+  // 1. Check if machine ID is already permanently anchored on this PC
+  const existingAnchor = !options.refresh ? loadAnchoredMachineId() : null;
+
   const winHw = queryWindowsHardware();
-  const mac = getPrimaryMacAddress();
 
   const rawElements = [
     winHw.uuid.trim().toUpperCase(),
     winHw.cpu.trim().toUpperCase(),
-    winHw.disk.trim().toUpperCase(),
-    winHw.machineGuid.trim().toLowerCase(),
-    mac.trim().toLowerCase()
+    winHw.machineGuid.trim().toLowerCase()
   ];
 
   const rawFingerprint = rawElements.join(':::');
@@ -100,15 +166,18 @@ export function getHardwareProfile(options = {}) {
     .digest('hex')
     .toUpperCase();
 
-  // Format: WA-WIN-XXXX-XXXX-XXXX-XXXX
-  const formattedId = `WA-WIN-${fullHash.slice(0, 4)}-${fullHash.slice(4, 8)}-${fullHash.slice(8, 12)}-${fullHash.slice(12, 16)}`;
+  // If anchor exists, keep the permanent anchor; otherwise use newly calculated ID
+  const formattedId = existingAnchor || `WA-WIN-${fullHash.slice(0, 4)}-${fullHash.slice(4, 8)}-${fullHash.slice(8, 12)}-${fullHash.slice(12, 16)}`;
+
+  // Save anchor to disk if not already saved
+  if (!existingAnchor) {
+    saveAnchoredMachineId(formattedId);
+  }
 
   cachedProfile = {
     uuid: winHw.uuid,
     cpu: winHw.cpu,
-    disk: winHw.disk,
     machineGuid: winHw.machineGuid,
-    mac,
     rawFingerprint,
     machineId: formattedId,
     hash: fullHash
