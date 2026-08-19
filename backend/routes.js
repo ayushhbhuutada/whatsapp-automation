@@ -849,7 +849,8 @@ router.post('/campaigns', (req, res, next) => {
     next();
   });
 }, async (req, res) => {
-  const { name, template = '', source, sheetUrl, tag, rawText, attachmentPath } = req.body;
+  const targetUserId = req.user?.id || 1;
+  const { name, template = '', source = 'file', sheetUrl, tag, rawText, attachmentPath } = req.body;
   const cleanAttachment = attachmentPath ? String(attachmentPath).trim().replace(/^["']+|["']+$|^\s*["']|["']\s*$/g, '').trim() : '';
 
   // Collect uploaded attachment files if present
@@ -860,53 +861,17 @@ router.post('/campaigns', (req, res, next) => {
 
   const combinedAttachment = [cleanAttachment, uploadedAttachmentsStr].filter(Boolean).join(', ');
 
-  if (!name) {
+  if (!name || !name.trim()) {
     return res.status(400).json({ error: 'Campaign name is required.' });
   }
 
   let contacts = [];
 
   try {
-    if (source === 'group') {
-      if (!tag) {
-        return res.status(400).json({ error: 'Please select a contact group/tag.' });
-      }
-      const rows = await all('SELECT * FROM saved_contacts WHERE user_id = ? AND tag = ?', [req.user.id, tag]);
-      contacts = rows.map((r, idx) => ({
-        name: r.name,
-        phone: r.phone,
-        company: r.company || '',
-        message: '',
-        attachment: combinedAttachment || '',
-        placeholderData: r.placeholder_data ? JSON.parse(r.placeholder_data) : { name: r.name, phone: r.phone, company: r.company },
-        rowIndex: idx + 1
-      }));
-    } else if (source === 'all_saved') {
-      const rows = await all('SELECT * FROM saved_contacts WHERE user_id = ?', [req.user.id]);
-      contacts = rows.map((r, idx) => ({
-        name: r.name,
-        phone: r.phone,
-        company: r.company || '',
-        message: '',
-        attachment: combinedAttachment || '',
-        placeholderData: r.placeholder_data ? JSON.parse(r.placeholder_data) : { name: r.name, phone: r.phone, company: r.company },
-        rowIndex: idx + 1
-      }));
-    } else if (source === 'raw_text') {
-      if (!rawText || !rawText.trim()) {
-        return res.status(400).json({ error: 'Please enter phone numbers or CSV text.' });
-      }
-      contacts = parseRawTextContacts(rawText);
-    } else if (source === 'sheet') {
-      if (!sheetUrl) {
-        return res.status(400).json({ error: 'Please provide a Google Sheets URL.' });
-      }
-      contacts = await fetchGoogleSheet(sheetUrl);
-      await run("INSERT OR REPLACE INTO settings (user_id, key, value) VALUES (?, 'google_sheet_url', ?)", [req.user.id, sheetUrl]);
-    } else if (source === 'file') {
+    if (source === 'file') {
       const excelFile = req.file || (req.files && req.files['file'] && req.files['file'][0]);
       if (!excelFile) {
-        return res.status(400).json({ error: 'Please upload a spreadsheet file.' });
+        return res.status(400).json({ error: 'Please upload a spreadsheet file (.xlsx, .xls, or .csv).' });
       }
       try {
         contacts = parseSpreadsheet(excelFile.path);
@@ -917,19 +882,57 @@ router.post('/campaigns', (req, res, next) => {
           }
         } catch (e) {}
       }
+    } else if (source === 'raw_text') {
+      if (!rawText || !rawText.trim()) {
+        return res.status(400).json({ error: 'Please enter phone numbers or paste CSV text.' });
+      }
+      contacts = parseRawTextContacts(rawText);
+    } else if (source === 'sheet') {
+      if (!sheetUrl || !sheetUrl.trim()) {
+        return res.status(400).json({ error: 'Please provide a valid Google Sheets URL.' });
+      }
+      contacts = await fetchGoogleSheet(sheetUrl);
+      await run("INSERT OR REPLACE INTO settings (user_id, key, value) VALUES (?, 'google_sheet_url', ?)", [targetUserId, sheetUrl]);
+    } else if (source === 'group') {
+      if (!tag) {
+        return res.status(400).json({ error: 'Please select an audience contact group/tag.' });
+      }
+      const rows = await all('SELECT * FROM saved_contacts WHERE user_id = ? AND tag = ?', [targetUserId, tag]);
+      contacts = rows.map((r, idx) => ({
+        name: r.name,
+        phone: r.phone,
+        company: r.company || '',
+        message: '',
+        attachment: combinedAttachment || '',
+        placeholderData: r.placeholder_data ? JSON.parse(r.placeholder_data) : { name: r.name, phone: r.phone, company: r.company },
+        rowIndex: idx + 1
+      }));
+    } else if (source === 'all_saved') {
+      const rows = await all('SELECT * FROM saved_contacts WHERE user_id = ?', [targetUserId]);
+      contacts = rows.map((r, idx) => ({
+        name: r.name,
+        phone: r.phone,
+        company: r.company || '',
+        message: '',
+        attachment: combinedAttachment || '',
+        placeholderData: r.placeholder_data ? JSON.parse(r.placeholder_data) : { name: r.name, phone: r.phone, company: r.company },
+        rowIndex: idx + 1
+      }));
     } else {
-      return res.status(400).json({ error: 'Invalid contact source selected.' });
+      return res.status(400).json({ error: 'Invalid contact source selected. Choose Spreadsheet, Quick Paste, Google Sheet, or Saved Audience.' });
     }
 
     // Fetch user default country code setting for sanitization
-    const ccSetting = await get("SELECT value FROM settings WHERE user_id = ? AND key = 'default_country_code'", [req.user.id]);
+    const ccSetting = await get("SELECT value FROM settings WHERE user_id = ? AND key = 'default_country_code'", [targetUserId]);
     const defaultCc = ccSetting ? ccSetting.value : '91';
 
     // Sanitize and deduplicate contacts list
     contacts = sanitizeContactsList(contacts, defaultCc);
 
     if (contacts.length === 0) {
-      return res.status(400).json({ error: 'No valid recipients found in selected source after sanitization.' });
+      return res.status(400).json({ 
+        error: 'No valid phone numbers found. Please check your recipient list or spreadsheet format.' 
+      });
     }
 
     const { scheduledAt, sessionMode = 'auto_split', sessionName, sessionId, selectedSessions, autoFragment, fragmentMaxPerWindow } = req.body;

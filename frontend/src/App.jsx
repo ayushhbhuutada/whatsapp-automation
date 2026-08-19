@@ -42,6 +42,7 @@ import {
   Calendar,
   Copy,
   Download,
+  Upload,
   Lock,
   ArrowRight,
   ExternalLink,
@@ -843,8 +844,9 @@ export default function App() {
 
           {activeTab === 'create' && (
             <CreateCampaignView 
-              onSuccess={() => {
+              onSuccess={(newId) => {
                 fetchCampaigns();
+                if (newId) setSelectedCampaignId(String(newId));
                 setActiveTab('dashboard');
               }}
               settings={settings}
@@ -1874,9 +1876,11 @@ function AudienceHubView() {
 // ============================================================================
 function CreateCampaignView({ onSuccess, settings, campaigns = [], duplicateCampaign, initialTemplate, onOpenSpintaxStudio }) {
   const fileInputRef = useRef(null);
+  const spreadsheetInputRef = useRef(null);
   const [name, setName] = useState('');
   const [template, setTemplate] = useState(initialTemplate || '');
-  const [source, setSource] = useState('group'); // group, all_saved, sheet, raw_text, file
+  const [source, setSource] = useState('file'); // 'file', 'raw_text', 'sheet', 'group', 'all_saved'
+  const [excelFile, setExcelFile] = useState(null);
   const [selectedTag, setSelectedTag] = useState('');
   const [tags, setTags] = useState([]);
   const [sheetUrl, setSheetUrl] = useState('');
@@ -1979,9 +1983,10 @@ function CreateCampaignView({ onSuccess, settings, campaigns = [], duplicateCamp
     setFormError(null);
 
     if (!name.trim()) return setFormError('Campaign name is required.');
+    if (source === 'file' && !excelFile) return setFormError('Please select or upload an Excel (.xlsx, .xls) or CSV spreadsheet file.');
     if (source === 'group' && !selectedTag) return setFormError('Please select an Audience Tag / Group.');
     if (source === 'sheet' && !sheetUrl.trim()) return setFormError('Please enter your Google Sheets shared URL.');
-    if (source === 'raw_text' && !rawText.trim()) return setFormError('Please enter phone numbers or CSV text.');
+    if (source === 'raw_text' && !rawText.trim()) return setFormError('Please enter phone numbers or paste CSV text.');
 
     setIsSubmitting(true);
 
@@ -2017,16 +2022,19 @@ function CreateCampaignView({ onSuccess, settings, campaigns = [], duplicateCamp
       Array.from(attachmentFiles).forEach(f => formData.append('attachments', f));
     }
 
+    if (source === 'file' && excelFile) formData.append('file', excelFile);
     if (source === 'group') formData.append('tag', selectedTag);
     if (source === 'sheet') formData.append('sheetUrl', sheetUrl);
     if (source === 'raw_text') formData.append('rawText', rawText);
 
     try {
-      await axios.post(`${API_BASE}/campaigns`, formData);
-      onSuccess();
+      const res = await axios.post(`${API_BASE}/campaigns`, formData);
+      if (onSuccess) {
+        onSuccess(res.data?.campaignId);
+      }
     } catch (err) {
-      console.error(err);
-      setFormError(err.response?.data?.error || 'An error occurred while building the campaign.');
+      console.error('Error creating campaign:', err);
+      setFormError(err.response?.data?.error || err.message || 'An error occurred while building the campaign.');
     } finally {
       setIsSubmitting(false);
     }
@@ -2063,8 +2071,8 @@ function CreateCampaignView({ onSuccess, settings, campaigns = [], duplicateCamp
 
       <form onSubmit={handleSubmit} className="space-y-6">
         {formError && (
-          <div className="p-4 bg-rose-500/10 border border-rose-500/25 rounded-xl flex items-center gap-3 text-rose-400 text-sm">
-            <XCircle size={18} />
+          <div className="p-4 bg-rose-500/10 border border-rose-500/25 rounded-xl flex items-center gap-3 text-rose-400 text-sm animate-shake">
+            <XCircle size={18} className="shrink-0" />
             <span>{formError}</span>
           </div>
         )}
@@ -2082,89 +2090,153 @@ function CreateCampaignView({ onSuccess, settings, campaigns = [], duplicateCamp
           />
         </div>
 
-        {/* Audience Source Selector Cards */}
+        {/* Audience Source Selector Cards (5 Full Options) */}
         <div className="space-y-3">
           <label className="text-sm font-semibold text-slate-300 block">Select Target Audience Source</label>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5">
             <button
               type="button"
-              onClick={() => setSource('group')}
-              className={`p-3.5 rounded-xl border text-center transition-all duration-200 ${
-                source === 'group'
-                  ? 'bg-slate-800 border-emerald-500 text-emerald-400 shadow-md'
-                  : 'bg-slate-900/40 border-slate-800 text-slate-400 hover:bg-slate-900 hover:text-slate-200'
-              }`}
-            >
-              <Tag size={20} className="mx-auto mb-1.5" />
-              <span className="text-xs font-semibold block">Saved Group</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setSource('all_saved')}
-              className={`p-3.5 rounded-xl border text-center transition-all duration-200 ${
-                source === 'all_saved'
-                  ? 'bg-slate-800 border-emerald-500 text-emerald-400 shadow-md'
-                  : 'bg-slate-900/40 border-slate-800 text-slate-400 hover:bg-slate-900 hover:text-slate-200'
-              }`}
-            >
-              <Users size={20} className="mx-auto mb-1.5" />
-              <span className="text-xs font-semibold block">All Contacts</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setSource('sheet')}
-              className={`p-3.5 rounded-xl border text-center transition-all duration-200 ${
-                source === 'sheet'
-                  ? 'bg-slate-800 border-emerald-500 text-emerald-400 shadow-md'
+              onClick={() => setSource('file')}
+              className={`p-3 rounded-xl border text-center transition-all duration-200 ${
+                source === 'file'
+                  ? 'bg-slate-800 border-emerald-500 text-emerald-400 shadow-md ring-1 ring-emerald-500/30'
                   : 'bg-slate-900/40 border-slate-800 text-slate-400 hover:bg-slate-900 hover:text-slate-200'
               }`}
             >
               <FileSpreadsheet size={20} className="mx-auto mb-1.5" />
-              <span className="text-xs font-semibold block">Google Sheet</span>
+              <span className="text-xs font-semibold block">Spreadsheet</span>
+              <span className="text-[9px] text-slate-500 block font-normal">.xlsx, .csv</span>
             </button>
 
             <button
               type="button"
               onClick={() => setSource('raw_text')}
-              className={`p-3.5 rounded-xl border text-center transition-all duration-200 ${
+              className={`p-3 rounded-xl border text-center transition-all duration-200 ${
                 source === 'raw_text'
-                  ? 'bg-slate-800 border-emerald-500 text-emerald-400 shadow-md'
+                  ? 'bg-slate-800 border-emerald-500 text-emerald-400 shadow-md ring-1 ring-emerald-500/30'
                   : 'bg-slate-900/40 border-slate-800 text-slate-400 hover:bg-slate-900 hover:text-slate-200'
               }`}
             >
               <Clipboard size={20} className="mx-auto mb-1.5" />
               <span className="text-xs font-semibold block">Quick Paste</span>
+              <span className="text-[9px] text-slate-500 block font-normal">Phone List</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setSource('sheet')}
+              className={`p-3 rounded-xl border text-center transition-all duration-200 ${
+                source === 'sheet'
+                  ? 'bg-slate-800 border-emerald-500 text-emerald-400 shadow-md ring-1 ring-emerald-500/30'
+                  : 'bg-slate-900/40 border-slate-800 text-slate-400 hover:bg-slate-900 hover:text-slate-200'
+              }`}
+            >
+              <Globe size={20} className="mx-auto mb-1.5" />
+              <span className="text-xs font-semibold block">Google Sheet</span>
+              <span className="text-[9px] text-slate-500 block font-normal">Live URL</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setSource('group')}
+              className={`p-3 rounded-xl border text-center transition-all duration-200 ${
+                source === 'group'
+                  ? 'bg-slate-800 border-emerald-500 text-emerald-400 shadow-md ring-1 ring-emerald-500/30'
+                  : 'bg-slate-900/40 border-slate-800 text-slate-400 hover:bg-slate-900 hover:text-slate-200'
+              }`}
+            >
+              <Tag size={20} className="mx-auto mb-1.5" />
+              <span className="text-xs font-semibold block">Saved Group</span>
+              <span className="text-[9px] text-slate-500 block font-normal">Audience Hub</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setSource('all_saved')}
+              className={`p-3 rounded-xl border text-center transition-all duration-200 ${
+                source === 'all_saved'
+                  ? 'bg-slate-800 border-emerald-500 text-emerald-400 shadow-md ring-1 ring-emerald-500/30'
+                  : 'bg-slate-900/40 border-slate-800 text-slate-400 hover:bg-slate-900 hover:text-slate-200'
+              }`}
+            >
+              <Users size={20} className="mx-auto mb-1.5" />
+              <span className="text-xs font-semibold block">All Contacts</span>
+              <span className="text-[9px] text-slate-500 block font-normal">Entire List</span>
             </button>
           </div>
         </div>
 
         {/* Dynamic Source Inputs */}
-        {source === 'group' && (
-          <div className="space-y-1.5">
-            <label className="text-sm font-semibold text-slate-300">Select Contact Tag / Group</label>
-            {tags.length === 0 ? (
-              <p className="text-xs text-amber-400 bg-amber-500/10 border border-amber-500/20 p-3 rounded-xl">
-                No contact groups created yet. Please create contacts in the Audience & Contacts Hub or choose another source.
-              </p>
-            ) : (
-              <select
-                value={selectedTag}
-                onChange={(e) => setSelectedTag(e.target.value)}
-                className="w-full glass-input rounded-xl px-4 py-3 text-slate-200 text-sm"
-              >
-                {tags.map(t => (
-                  <option key={t} value={t}>{t}</option>
-                ))}
-              </select>
-            )}
+        {source === 'file' && (
+          <div className="space-y-2">
+            <label className="text-sm font-semibold text-slate-300">Upload Spreadsheet (.xlsx, .xls, .csv)</label>
+            <div 
+              onClick={() => spreadsheetInputRef.current && spreadsheetInputRef.current.click()}
+              onDragOver={(e) => e.preventDefault()}
+              onDrop={(e) => {
+                e.preventDefault();
+                if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+                  setExcelFile(e.dataTransfer.files[0]);
+                }
+              }}
+              className={`p-6 border-2 border-dashed rounded-2xl text-center cursor-pointer transition-all ${
+                excelFile 
+                  ? 'bg-emerald-950/20 border-emerald-500/50 shadow-inner' 
+                  : 'bg-slate-900/30 border-slate-700/60 hover:bg-slate-900/60 hover:border-emerald-500/40'
+              }`}
+            >
+              <input
+                ref={spreadsheetInputRef}
+                type="file"
+                accept=".xlsx,.xls,.csv"
+                className="hidden"
+                onChange={(e) => {
+                  if (e.target.files && e.target.files[0]) {
+                    setExcelFile(e.target.files[0]);
+                  }
+                }}
+              />
+              {excelFile ? (
+                <div className="space-y-2">
+                  <div className="w-12 h-12 mx-auto rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center border border-emerald-500/40">
+                    <FileSpreadsheet size={24} />
+                  </div>
+                  <div>
+                    <p className="text-sm font-bold text-white">{excelFile.name}</p>
+                    <p className="text-xs text-emerald-400 font-mono mt-0.5">
+                      {(excelFile.size / 1024).toFixed(1)} KB • File Loaded Successfully
+                    </p>
+                  </div>
+                  <span className="text-[11px] text-slate-400 hover:text-slate-200 underline">Click to choose a different spreadsheet file</span>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  <Upload size={32} className="mx-auto text-emerald-400/80" />
+                  <div>
+                    <p className="text-sm font-semibold text-slate-200">Click to upload or drag & drop Excel / CSV</p>
+                    <p className="text-xs text-slate-400">Supports .xlsx, .xls, and .csv files with phone numbers</p>
+                  </div>
+                  <div className="flex items-center justify-center gap-2 pt-1 text-[10px] text-slate-500 font-mono">
+                    <span>Columns: Name, Phone, Company, Message, etc.</span>
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         )}
 
-        {source === 'all_saved' && (
-          <div className="p-4 bg-emerald-500/10 border border-emerald-500/20 rounded-xl text-emerald-400 text-xs">
-            This campaign will target all active contacts saved in your Audience Address Book.
+        {source === 'raw_text' && (
+          <div className="space-y-1.5">
+            <label className="text-sm font-semibold text-slate-300">Paste Phone Numbers or CSV Block</label>
+            <textarea
+              rows={5}
+              required
+              placeholder={`+919876543210\n+919876543211\nAlice, 9876543212, ACME Corp`}
+              value={rawText}
+              onChange={(e) => setRawText(e.target.value)}
+              className="w-full glass-input rounded-xl p-3 text-xs font-mono text-slate-200"
+            />
+            <span className="text-[10px] text-slate-500">Supports 1 phone number per line, or comma-separated: Name, Phone, Company.</span>
           </div>
         )}
 
@@ -2183,17 +2255,30 @@ function CreateCampaignView({ onSuccess, settings, campaigns = [], duplicateCamp
           </div>
         )}
 
-        {source === 'raw_text' && (
+        {source === 'group' && (
           <div className="space-y-1.5">
-            <label className="text-sm font-semibold text-slate-300">Paste Phone Numbers or CSV Block</label>
-            <textarea
-              rows={5}
-              required
-              placeholder={`+919876543210\n+919876543211\nAlice, 9876543212`}
-              value={rawText}
-              onChange={(e) => setRawText(e.target.value)}
-              className="w-full glass-input rounded-xl p-3 text-xs font-mono text-slate-200"
-            />
+            <label className="text-sm font-semibold text-slate-300">Select Contact Tag / Group</label>
+            {tags.length === 0 ? (
+              <p className="text-xs text-amber-400 bg-amber-500/10 border border-amber-500/20 p-3 rounded-xl">
+                No contact groups created yet. Please create contacts in the Audience Hub or choose Spreadsheet / Quick Paste.
+              </p>
+            ) : (
+              <select
+                value={selectedTag}
+                onChange={(e) => setSelectedTag(e.target.value)}
+                className="w-full glass-input rounded-xl px-4 py-3 text-slate-200 text-sm"
+              >
+                {tags.map(t => (
+                  <option key={t} value={t}>{t}</option>
+                ))}
+              </select>
+            )}
+          </div>
+        )}
+
+        {source === 'all_saved' && (
+          <div className="p-4 bg-emerald-500/10 border border-emerald-500/20 rounded-xl text-emerald-400 text-xs">
+            This campaign will target all active contacts saved in your Audience Address Book.
           </div>
         )}
 

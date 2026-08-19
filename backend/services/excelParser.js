@@ -277,6 +277,15 @@ export function sanitizeContactsList(contacts = [], defaultCountryCode = '91') {
     const hasPlus = phone.startsWith('+');
     let cleanDigits = phone.replace(/\D/g, '');
 
+    // Strip international 00 prefix (e.g. 0091 -> 91)
+    if (cleanDigits.startsWith('00')) {
+      cleanDigits = cleanDigits.slice(2);
+    }
+    // Strip leading trunk zero (e.g. 09876543210 -> 9876543210)
+    if (cleanDigits.length === 11 && cleanDigits.startsWith('0')) {
+      cleanDigits = cleanDigits.slice(1);
+    }
+
     if (!cleanDigits || cleanDigits.length < 5) continue;
 
     // Apply default country code if 10 digits long and no country code was included
@@ -289,9 +298,18 @@ export function sanitizeContactsList(contacts = [], defaultCountryCode = '91') {
     if (seenPhones.has(cleanDigits)) continue;
     seenPhones.add(cleanDigits);
 
+    const name = (c.name && String(c.name).trim()) || 'Recipient';
+    const company = (c.company && String(c.company).trim()) || '';
+    const placeholderData = c.placeholderData && typeof c.placeholderData === 'object' 
+      ? { name, phone: finalPhone, company, ...c.placeholderData }
+      : { name, phone: finalPhone, company };
+
     sanitized.push({
       ...c,
-      phone: finalPhone
+      name,
+      phone: finalPhone,
+      company,
+      placeholderData
     });
   }
 
