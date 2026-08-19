@@ -97,28 +97,46 @@ export async function generateClientSideLicense(formData) {
     token = `WALIC.${b64Payload}.${mockSig}`;
   }
 
+  const createdIso = new Date(now).toISOString();
+  const daysLeft = Math.max(0, Math.ceil((new Date(expiryDate).getTime() - now) / (1000 * 60 * 60 * 24)));
+
   const licenseRecord = {
-    id: 'lic_' + Date.now(),
-    licenseKey: token,
+    id: 'lic_' + now,
+    client_name: customer,
+    clientName: customer,
     customer,
-    clientEmail: formData.clientEmail || '',
+    client_email: (formData.clientEmail || '').trim(),
+    clientEmail: (formData.clientEmail || '').trim(),
+    machine_id: nodeLockId,
     machineId: nodeLockId,
+    license_key: token,
+    licenseKey: token,
+    validity_days: validityDays,
     validityDays,
+    expiry_date: expiryDate,
     expiryDate,
+    expires_at: expiryDate,
+    days_remaining: daysLeft,
+    is_expired: daysLeft === 0,
+    sessions_limit: sessionsLimit,
     sessionsLimit,
+    turbo_allowed: !!formData.turboAllowed,
     turboAllowed: !!formData.turboAllowed,
+    multi_session_allowed: !!formData.multiSessionAllowed,
     multiSessionAllowed: !!formData.multiSessionAllowed,
     notes: formData.notes || '',
-    created_at: new Date().toISOString(),
-    status: 'Active'
+    created_at: createdIso,
+    status: 'active'
   };
 
   // Save to browser history
   try {
     const saved = localStorage.getItem('admin_generated_licenses');
     const list = saved ? JSON.parse(saved) : [];
-    list.unshift(licenseRecord);
-    localStorage.setItem('admin_generated_licenses', JSON.stringify(list.slice(0, 100)));
+    // Avoid duplicate keys
+    const filtered = list.filter(item => (item.licenseKey || item.license_key) !== token);
+    filtered.unshift(licenseRecord);
+    localStorage.setItem('admin_generated_licenses', JSON.stringify(filtered.slice(0, 200)));
   } catch (_e) {}
 
   const whatsappMessage = `*WhatsApp Automator Pro - Commercial License*
@@ -195,13 +213,103 @@ export function inspectClientSideLicense(token) {
 }
 
 /**
- * Gets license history from localStorage
+ * Gets license history from localStorage with normalized fields
  */
 export function getLocalLicenseHistory() {
   try {
     const saved = localStorage.getItem('admin_generated_licenses');
-    return saved ? JSON.parse(saved) : [];
+    if (!saved) return [];
+    const list = JSON.parse(saved);
+    const now = Date.now();
+    return list.map(item => {
+      const expDate = item.expires_at || item.expiryDate || item.expiry_date;
+      const expiryTime = expDate ? new Date(expDate).getTime() : 0;
+      const isExpired = expiryTime ? now > expiryTime : false;
+      const daysRemaining = expiryTime ? Math.max(0, Math.ceil((expiryTime - now) / (1000 * 60 * 60 * 24))) : (item.validity_days || 365);
+
+      return {
+        ...item,
+        client_name: item.client_name || item.clientName || item.customer || 'Customer',
+        client_email: item.client_email || item.clientEmail || '',
+        machine_id: item.machine_id || item.machineId || '*',
+        license_key: item.license_key || item.licenseKey,
+        validity_days: item.validity_days || item.validityDays || 365,
+        sessions_limit: item.sessions_limit || item.sessionsLimit || 1,
+        status: (item.status || 'active').toLowerCase(),
+        days_remaining: daysRemaining,
+        is_expired: isExpired,
+        expires_at: expDate
+      };
+    });
   } catch (_e) {
     return [];
+  }
+}
+
+/**
+ * Revokes a license in local storage
+ */
+export function revokeLocalLicense(idOrKey) {
+  try {
+    const saved = localStorage.getItem('admin_generated_licenses');
+    if (!saved) return false;
+    const list = JSON.parse(saved);
+    const updated = list.map(item => {
+      const match = String(item.id) === String(idOrKey) || 
+                    item.licenseKey === idOrKey || 
+                    item.license_key === idOrKey;
+      if (match) {
+        return { ...item, status: 'revoked', revoked_at: new Date().toISOString() };
+      }
+      return item;
+    });
+    localStorage.setItem('admin_generated_licenses', JSON.stringify(updated));
+    return true;
+  } catch (_e) {
+    return false;
+  }
+}
+
+/**
+ * Reactivates a previously revoked license in local storage
+ */
+export function reactivateLocalLicense(idOrKey) {
+  try {
+    const saved = localStorage.getItem('admin_generated_licenses');
+    if (!saved) return false;
+    const list = JSON.parse(saved);
+    const updated = list.map(item => {
+      const match = String(item.id) === String(idOrKey) || 
+                    item.licenseKey === idOrKey || 
+                    item.license_key === idOrKey;
+      if (match) {
+        return { ...item, status: 'active', reactivated_at: new Date().toISOString() };
+      }
+      return item;
+    });
+    localStorage.setItem('admin_generated_licenses', JSON.stringify(updated));
+    return true;
+  } catch (_e) {
+    return false;
+  }
+}
+
+/**
+ * Deletes a license from local storage
+ */
+export function deleteLocalLicense(idOrKey) {
+  try {
+    const saved = localStorage.getItem('admin_generated_licenses');
+    if (!saved) return false;
+    const list = JSON.parse(saved);
+    const updated = list.filter(item => 
+      String(item.id) !== String(idOrKey) && 
+      item.licenseKey !== idOrKey && 
+      item.license_key !== idOrKey
+    );
+    localStorage.setItem('admin_generated_licenses', JSON.stringify(updated));
+    return true;
+  } catch (_e) {
+    return false;
   }
 }

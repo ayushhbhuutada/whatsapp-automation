@@ -1969,6 +1969,46 @@ router.post('/admin/licenses/revoke', async (req, res) => {
   }
 });
 
+// Reactivate a previously revoked license
+router.post('/admin/licenses/reactivate', async (req, res) => {
+  try {
+    const { id, licenseKey } = req.body || {};
+    const { run } = await import('./database.js');
+    
+    if (id) {
+      await run(`UPDATE issued_licenses SET status = 'active', revoked_at = NULL WHERE id = ?`, [id]);
+    } else if (licenseKey) {
+      await run(`UPDATE issued_licenses SET status = 'active', revoked_at = NULL WHERE license_key = ?`, [licenseKey.trim()]);
+    } else {
+      return res.status(400).json({ success: false, error: 'License ID or key is required.' });
+    }
+
+    res.json({ success: true, message: 'License reactivated successfully.' });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Delete a license record
+router.post('/admin/licenses/delete', async (req, res) => {
+  try {
+    const { id, licenseKey } = req.body || {};
+    const { run } = await import('./database.js');
+    
+    if (id) {
+      await run(`DELETE FROM issued_licenses WHERE id = ?`, [id]);
+    } else if (licenseKey) {
+      await run(`DELETE FROM issued_licenses WHERE license_key = ?`, [licenseKey.trim()]);
+    } else {
+      return res.status(400).json({ success: false, error: 'License ID or key is required.' });
+    }
+
+    res.json({ success: true, message: 'License record deleted successfully.' });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 // ==========================================
 // 9. Automated Self-Serve Checkout, Dynamic Store Config & Payment Webhooks
 // ==========================================

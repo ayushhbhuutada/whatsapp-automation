@@ -1,7 +1,14 @@
 import React, { useState, useEffect, useRef } from 'react';
 import SessionManager from './components/SessionManager';
 import axios from 'axios';
-import { generateClientSideLicense, inspectClientSideLicense, getLocalLicenseHistory } from './utils/licenseClient';
+import { 
+  generateClientSideLicense, 
+  inspectClientSideLicense, 
+  getLocalLicenseHistory,
+  revokeLocalLicense,
+  reactivateLocalLicense,
+  deleteLocalLicense
+} from './utils/licenseClient';
 import { 
   LayoutDashboard, 
   Users, 
@@ -47,7 +54,8 @@ import {
   ArrowRight,
   ExternalLink,
   ChevronRight,
-  RotateCcw
+  RotateCcw,
+  List
 } from 'lucide-react';
 
 const isDesktopApp = typeof window !== 'undefined' && Boolean(
@@ -4676,7 +4684,11 @@ function AdminLicenseConsoleView() {
   // History State
   const [licenses, setLicenses] = useState([]);
   const [historySearch, setHistorySearch] = useState('');
+  const [historyFilter, setHistoryFilter] = useState('all'); // 'all', 'active', 'revoked', 'expired'
   const [loadingHistory, setLoadingHistory] = useState(false);
+  const [expandedKeyId, setExpandedKeyId] = useState(null);
+  const [copiedKeyId, setCopiedKeyId] = useState(null);
+  const [copiedMsgId, setCopiedMsgId] = useState(null);
 
   // Inspector State
   const [inspectKey, setInspectKey] = useState('');
@@ -4685,17 +4697,55 @@ function AdminLicenseConsoleView() {
 
   const fetchHistory = async () => {
     setLoadingHistory(true);
+    let serverLicenses = [];
     try {
       const res = await axios.get(`${API_BASE}/admin/licenses/history`);
       if (res.data?.licenses && Array.isArray(res.data.licenses)) {
-        setLicenses(res.data.licenses);
-        setLoadingHistory(false);
-        return;
+        serverLicenses = res.data.licenses;
       }
     } catch (_e) {}
-    // Fallback to client-side localStorage history (for Vercel / offline admin)
-    const local = getLocalLicenseHistory();
-    setLicenses(local);
+
+    const localLicenses = getLocalLicenseHistory();
+
+    // Deduplicate and merge by license key
+    const map = new Map();
+    for (const lic of serverLicenses) {
+      const k = lic.license_key || lic.licenseKey;
+      if (k) map.set(k, lic);
+    }
+    for (const loc of localLicenses) {
+      const k = loc.license_key || loc.licenseKey;
+      if (k && !map.has(k)) {
+        map.set(k, loc);
+      }
+    }
+
+    const list = Array.from(map.values()).map(lic => {
+      const createdTime = lic.created_at ? new Date(lic.created_at).getTime() : Date.now();
+      const validityDays = parseInt(lic.validity_days || lic.validityDays || 365, 10);
+      const expDate = lic.expires_at || lic.expiryDate || lic.expiry_date || new Date(createdTime + validityDays * 24 * 60 * 60 * 1000).toISOString();
+      const expiryTime = new Date(expDate).getTime();
+      const isExpired = Date.now() > expiryTime;
+      const daysRemaining = Math.max(0, Math.ceil((expiryTime - Date.now()) / (1000 * 60 * 60 * 24)));
+
+      return {
+        ...lic,
+        id: lic.id || `lic_${createdTime}`,
+        client_name: lic.client_name || lic.clientName || lic.customer || 'Valued Customer',
+        client_email: lic.client_email || lic.clientEmail || '',
+        machine_id: lic.machine_id || lic.machineId || '*',
+        license_key: lic.license_key || lic.licenseKey,
+        validity_days: validityDays,
+        sessions_limit: parseInt(lic.sessions_limit || lic.sessionsLimit || 1, 10),
+        status: (lic.status || 'active').toLowerCase(),
+        days_remaining: daysRemaining,
+        is_expired: isExpired,
+        expires_at: expDate,
+        created_at: lic.created_at || new Date().toISOString()
+      };
+    });
+
+    setLicenses(list);
     setLoadingHistory(false);
   };
 
@@ -4704,6 +4754,152 @@ function AdminLicenseConsoleView() {
       fetchHistory();
     }
   }, [subTab]);
+
+  const handleRevokeLicense = async (lic) => {
+    const name = lic.client_name || lic.clientName || 'this client';
+    const id = lic.id;
+    const key = lic.license_key;
+
+    if (!confirm(`Are you sure you want to REVOKE the license for "${name}"?\n\nThe software will immediately reject this key for activation.`)) return;
+
+    // 1. Revoke in local storage
+    revokeLocalLicense(id || key);
+
+    // 2. Revoke in backend API if available
+    try {
+      await axios.post(`${API_BASE}/admin/licenses/revoke`, { id, licenseKey: key });
+    } catch (_e) {}
+
+    fetchHistory();
+  };
+
+  const handleReactivateLicense = async (lic) => {
+    const name = lic.client_name || lic.clientName || 'this client';
+    const id = lic.id;
+    const key = lic.license_key;
+
+    if (!confirm(`Reactivate license for "${name}"?`)) return;
+
+    // 1. Reactivate in local storage
+    reactivateLocalLicense(id || key);
+
+    // 2. Reactivate in backend API if available
+    try {
+      await axios.post(`${API_BASE}/admin/licenses/reactivate`, { id, licenseKey: key });
+    } catch (_e) {}
+
+    fetchHistory();
+  };
+
+  const handleDeleteLicenseRecord = async (lic) => {
+    const name = lic.client_name || lic.clientName || 'this license';
+    const id = lic.id;
+    const key = lic.license_key;
+
+    if (!confirm(`Delete record for "${name}" from your issued licenses history?`)) return;
+
+    // 1. Delete from local storage
+    deleteLocalLicense(id || key);
+
+    // 2. Delete from backend API if available
+    try {
+      await axios.post(`${API_BASE}/admin/licenses/delete`, { id, licenseKey: key });
+    } catch (_e) {}
+
+    fetchHistory();
+  };
+
+  const copyLicenseKeyOnly = (key, id = null) => {
+    navigator.clipboard.writeText(key);
+    if (id) {
+      setCopiedKeyId(id);
+      setTimeout(() => setCopiedKeyId(null), 2000);
+    } else {
+      setCopiedKey(true);
+      setTimeout(() => setCopiedKey(false), 2000);
+    }
+  };
+
+  const copyWhatsAppFormat = (data) => {
+    const text = `🚀 *WhatsApp Automator Pro — Commercial License Key*
+
+👤 *Client Name:* ${data.clientName || 'Customer'}
+📧 *Email:* ${data.clientEmail}
+📱 *Machine Binding:* \`${data.machineId}\`
+📅 *Validity:* ${data.validityDays} Days (Expires: ${new Date(data.expiresAt).toLocaleDateString()})
+⚡ *WhatsApp Profiles Allowed:* ${data.maxSessions} Sessions
+
+🔑 *Your License Key:*
+\`\`\`
+${data.licenseKey}
+\`\`\`
+
+---
+*How to Activate:*
+1. Launch WhatsApp Automator Pro on your PC.
+2. Paste the License Key above in the activation box
+3. Click *Activate License* and start automating!`;
+
+    navigator.clipboard.writeText(text);
+    setCopiedWhatsAppMsg(true);
+    setTimeout(() => setCopiedWhatsAppMsg(false), 2000);
+  };
+
+  const copyWhatsAppFormatForLicense = (lic) => {
+    const name = lic.client_name || 'Customer';
+    const email = lic.client_email || 'Not specified';
+    const machine = lic.machine_id !== '*' ? lic.machine_id : 'Universal (Any PC)';
+    const expDate = lic.expires_at ? new Date(lic.expires_at).toLocaleDateString() : `${lic.validity_days} Days`;
+    const key = lic.license_key;
+
+    const text = `🚀 *WhatsApp Automator Pro — Commercial License Key*
+
+👤 *Client:* ${name}
+📧 *Email:* ${email}
+📱 *Machine Binding:* \`${machine}\`
+📅 *Validity:* ${lic.validity_days} Days (Expires: ${expDate})
+⚡ *WhatsApp Profiles Allowed:* ${lic.sessions_limit} Accounts
+
+🔑 *Your License Key:*
+\`\`\`
+${key}
+\`\`\`
+
+---
+*How to Activate:*
+1. Launch WhatsApp Automator Pro on your PC.
+2. Paste the License Key into the activation window.
+3. Click "Activate License & Launch Workspace".
+
+For support, reply to this message.`;
+
+    navigator.clipboard.writeText(text);
+    setCopiedMsgId(lic.id);
+    setTimeout(() => setCopiedMsgId(null), 2500);
+  };
+
+  const totalCount = licenses.length;
+  const activeCount = licenses.filter(l => l.status === 'active' && !l.is_expired).length;
+  const revokedCount = licenses.filter(l => l.status === 'revoked').length;
+  const expiredCount = licenses.filter(l => l.is_expired && l.status !== 'revoked').length;
+
+  const filteredLicenses = licenses.filter(lic => {
+    const q = historySearch.toLowerCase().trim();
+    const matchesSearch = !q || (
+      (lic.client_name || '').toLowerCase().includes(q) ||
+      (lic.client_email || '').toLowerCase().includes(q) ||
+      (lic.machine_id || '').toLowerCase().includes(q) ||
+      (lic.license_key || '').toLowerCase().includes(q) ||
+      (lic.notes || '').toLowerCase().includes(q)
+    );
+
+    if (!matchesSearch) return false;
+
+    if (historyFilter === 'active') return lic.status === 'active' && !lic.is_expired;
+    if (historyFilter === 'revoked') return lic.status === 'revoked';
+    if (historyFilter === 'expired') return lic.is_expired && lic.status !== 'revoked';
+    return true;
+  });
 
 // Default Store & Plans Configuration Template
 const DEFAULT_STORE_CONFIG_FRONTEND = {
@@ -4942,54 +5138,6 @@ const DEFAULT_STORE_CONFIG_FRONTEND = {
       setInspectError(clientDecoded.error || 'Invalid or malformed license token.');
     }
   };
-
-  const handleRevoke = async (id, clientName) => {
-    if (!confirm(`Revoke license for "${clientName}"? The client will no longer be able to use the software.`)) return;
-    try {
-      await axios.post(`${API_BASE}/admin/licenses/revoke`, { id });
-      fetchHistory();
-    } catch (err) {
-      alert('Failed to revoke license: ' + err.message);
-    }
-  };
-
-  const copyLicenseKeyOnly = (key) => {
-    navigator.clipboard.writeText(key);
-    setCopiedKey(true);
-    setTimeout(() => setCopiedKey(false), 2000);
-  };
-
-  const copyWhatsAppFormat = (data) => {
-    const text = `🚀 *WhatsApp Automator Pro — Commercial License Key*
-
-👤 *Client Name:* ${data.clientName || 'Customer'}
-📧 *Email:* ${data.clientEmail}
-📱 *Machine Binding:* \`${data.machineId}\`
-📅 *Validity:* ${data.validityDays} Days (Expires: ${new Date(data.expiresAt).toLocaleDateString()})
-⚡ *WhatsApp Profiles Allowed:* ${data.maxSessions} Sessions
-
-🔑 *Your License Key:*
-\`${data.licenseKey}\`
-
----
-*How to Activate:*
-1. Install & open *WhatsApp Automator Pro Desktop*
-2. Paste the License Key above in the activation box
-3. Click *Activate License* and start automating!`;
-
-    navigator.clipboard.writeText(text);
-    setCopiedWhatsAppMsg(true);
-    setTimeout(() => setCopiedWhatsAppMsg(false), 2000);
-  };
-
-  const filteredLicenses = licenses.filter(lic => {
-    const q = historySearch.toLowerCase();
-    return (
-      (lic.client_name || '').toLowerCase().includes(q) ||
-      (lic.client_email || '').toLowerCase().includes(q) ||
-      (lic.machine_id || '').toLowerCase().includes(q)
-    );
-  });
 
   return (
     <div className="space-y-8 max-w-6xl">
@@ -5248,6 +5396,16 @@ const DEFAULT_STORE_CONFIG_FRONTEND = {
                     <span>{copiedWhatsAppMsg ? 'Copied for WhatsApp!' : '💬 Copy for WhatsApp'}</span>
                   </button>
                 </div>
+
+                <div className="pt-1">
+                  <button
+                    onClick={() => setSubTab('history')}
+                    className="w-full py-2 bg-slate-900/80 hover:bg-slate-800 border border-slate-800 text-slate-300 rounded-xl text-xs font-semibold transition flex items-center justify-center gap-1.5"
+                  >
+                    <List size={14} className="text-emerald-400" />
+                    <span>View in Issued Licenses History (All Details & Revocation)</span>
+                  </button>
+                </div>
               </div>
             ) : (
               <div className="glass-panel rounded-2xl p-6 border border-slate-800 text-center py-16 space-y-3">
@@ -5262,106 +5420,297 @@ const DEFAULT_STORE_CONFIG_FRONTEND = {
         </div>
       )}
 
-      {/* SUBTAB 2: ISSUED HISTORY TABLE */}
+      {/* SUBTAB 2: ISSUED HISTORY TABLE & COMPREHENSIVE CLIENT DETAILS */}
       {subTab === 'history' && (
-        <div className="glass-panel rounded-2xl p-6 border border-slate-800 space-y-6">
+        <div className="glass-panel rounded-2xl p-6 border border-slate-800 space-y-6 animate-fade-in">
+          {/* Header & Quick Action */}
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pb-4 border-b border-slate-800">
             <div>
-              <h3 className="text-base font-bold text-white">Issued Commercial Licenses</h3>
-              <p className="text-xs text-slate-400">Track active client activations and remaining validity</p>
+              <h3 className="text-base font-bold text-white flex items-center gap-2">
+                <ShieldCheck size={20} className="text-emerald-400" />
+                <span>Issued Commercial Licenses & Client Manager</span>
+              </h3>
+              <p className="text-xs text-slate-400">View complete token details, bound machines, remaining validity, and manage live revocation</p>
             </div>
 
-            <div className="flex items-center gap-2 w-full sm:w-auto">
-              <div className="relative flex-1 sm:w-64">
-                <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
-                <input
-                  type="text"
-                  placeholder="Search client, email or machine..."
-                  value={historySearch}
-                  onChange={(e) => setHistorySearch(e.target.value)}
-                  className="w-full pl-9 pr-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs text-slate-200 focus:outline-none focus:border-emerald-500"
-                />
-              </div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setSubTab('generator')}
+                className="px-3 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow"
+              >
+                <Plus size={14} />
+                <span>Issue New Key</span>
+              </button>
               <button
                 onClick={fetchHistory}
-                className="p-2 bg-slate-900 border border-slate-800 hover:bg-slate-800 text-slate-300 rounded-xl"
+                title="Refresh License History"
+                className="p-2 bg-slate-900 border border-slate-800 hover:bg-slate-800 text-slate-300 rounded-xl transition"
               >
-                <RefreshCw size={16} className={loadingHistory ? 'animate-spin' : ''} />
+                <RefreshCw size={15} className={loadingHistory ? 'animate-spin text-emerald-400' : ''} />
               </button>
             </div>
           </div>
 
+          {/* Quick Metrics Bar */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+            <div className="p-3.5 bg-slate-900/60 border border-slate-800 rounded-xl space-y-1">
+              <span className="text-[10px] text-slate-400 uppercase font-semibold block">Total Issued</span>
+              <p className="text-xl font-black text-white font-heading">{totalCount}</p>
+            </div>
+            <div className="p-3.5 bg-emerald-950/20 border border-emerald-500/20 rounded-xl space-y-1">
+              <span className="text-[10px] text-emerald-400 uppercase font-semibold block">Active Clients</span>
+              <p className="text-xl font-black text-emerald-400 font-heading">{activeCount}</p>
+            </div>
+            <div className="p-3.5 bg-rose-950/20 border border-rose-500/20 rounded-xl space-y-1">
+              <span className="text-[10px] text-rose-400 uppercase font-semibold block">Revoked Licenses</span>
+              <p className="text-xl font-black text-rose-400 font-heading">{revokedCount}</p>
+            </div>
+            <div className="p-3.5 bg-amber-950/20 border border-amber-500/20 rounded-xl space-y-1">
+              <span className="text-[10px] text-amber-400 uppercase font-semibold block">Expired</span>
+              <p className="text-xl font-black text-amber-400 font-heading">{expiredCount}</p>
+            </div>
+          </div>
+
+          {/* Search Bar & Status Filter Tabs */}
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pt-2">
+            <div className="flex items-center gap-1.5 bg-slate-950 p-1 rounded-xl border border-slate-800 text-xs font-semibold overflow-x-auto">
+              <button
+                onClick={() => setHistoryFilter('all')}
+                className={`px-3 py-1.5 rounded-lg transition ${
+                  historyFilter === 'all' ? 'bg-slate-800 text-white shadow' : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                All ({totalCount})
+              </button>
+              <button
+                onClick={() => setHistoryFilter('active')}
+                className={`px-3 py-1.5 rounded-lg transition flex items-center gap-1 ${
+                  historyFilter === 'active' ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30' : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                <span className="w-2 h-2 rounded-full bg-emerald-400 inline-block" />
+                Active ({activeCount})
+              </button>
+              <button
+                onClick={() => setHistoryFilter('revoked')}
+                className={`px-3 py-1.5 rounded-lg transition flex items-center gap-1 ${
+                  historyFilter === 'revoked' ? 'bg-rose-500/20 text-rose-300 border border-rose-500/30' : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                <span className="w-2 h-2 rounded-full bg-rose-400 inline-block" />
+                Revoked ({revokedCount})
+              </button>
+              <button
+                onClick={() => setHistoryFilter('expired')}
+                className={`px-3 py-1.5 rounded-lg transition flex items-center gap-1 ${
+                  historyFilter === 'expired' ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30' : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                <span className="w-2 h-2 rounded-full bg-amber-400 inline-block" />
+                Expired ({expiredCount})
+              </button>
+            </div>
+
+            <div className="relative flex-1 sm:max-w-xs">
+              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
+              <input
+                type="text"
+                placeholder="Search by client, email, machine ID, or key..."
+                value={historySearch}
+                onChange={(e) => setHistorySearch(e.target.value)}
+                className="w-full pl-9 pr-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs text-slate-200 focus:outline-none focus:border-emerald-500"
+              />
+            </div>
+          </div>
+
+          {/* Licenses List Cards */}
           {filteredLicenses.length === 0 ? (
-            <div className="text-center py-12 text-slate-500 text-xs">
-              No issued licenses found matching your search.
+            <div className="text-center py-16 text-slate-500 text-xs border border-dashed border-slate-800 rounded-2xl space-y-2">
+              <ShieldCheck size={32} className="mx-auto text-slate-600 opacity-60" />
+              <p className="font-semibold text-slate-400">No issued commercial licenses found.</p>
+              <p className="text-[11px] text-slate-500">Switch to the License Generator tab to issue your first commercial license key.</p>
             </div>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs">
-                <thead>
-                  <tr className="border-b border-slate-800 text-slate-400 uppercase tracking-wider text-[10px]">
-                    <th className="py-3 px-3">Client</th>
-                    <th className="py-3 px-3">Bound Machine ID</th>
-                    <th className="py-3 px-3">Validity</th>
-                    <th className="py-3 px-3">Sessions</th>
-                    <th className="py-3 px-3">Status</th>
-                    <th className="py-3 px-3 text-right">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-800/60">
-                  {filteredLicenses.map((lic) => (
-                    <tr key={lic.id} className="hover:bg-slate-900/40 transition-colors">
-                      <td className="py-3 px-3">
-                        <p className="font-bold text-white">{lic.client_name}</p>
-                        <p className="text-[10px] text-slate-400">{lic.client_email}</p>
-                      </td>
-                      <td className="py-3 px-3">
-                        <span className="font-mono text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20 text-[11px]">
-                          {lic.machine_id}
-                        </span>
-                      </td>
-                      <td className="py-3 px-3">
-                        <p className="font-semibold text-slate-200">{lic.days_remaining}d remaining</p>
-                        <p className="text-[10px] text-slate-500">{lic.validity_days} days total</p>
-                      </td>
-                      <td className="py-3 px-3 font-semibold text-slate-300">
-                        {lic.sessions_limit} Profiles
-                      </td>
-                      <td className="py-3 px-3">
-                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded ${
-                          lic.status === 'active' && !lic.is_expired
-                            ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
-                            : lic.status === 'revoked'
-                            ? 'bg-rose-500/20 text-rose-400 border border-rose-500/30'
-                            : 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
+            <div className="space-y-4">
+              {filteredLicenses.map((lic) => {
+                const isRevoked = lic.status === 'revoked';
+                const isExp = lic.is_expired;
+                const isExpanded = expandedKeyId === lic.id;
+                const isCopiedKey = copiedKeyId === lic.id;
+                const isCopiedMsg = copiedMsgId === lic.id;
+
+                return (
+                  <div
+                    key={lic.id}
+                    className={`p-5 rounded-2xl border transition-all space-y-4 ${
+                      isRevoked
+                        ? 'bg-rose-950/10 border-rose-500/25'
+                        : isExp
+                        ? 'bg-amber-950/10 border-amber-500/25'
+                        : 'bg-slate-900/40 border-slate-800 hover:border-slate-700'
+                    }`}
+                  >
+                    {/* Top Row: Client Info & Status Badge */}
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                      <div className="flex items-center gap-3">
+                        <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-bold text-sm border ${
+                          isRevoked
+                            ? 'bg-rose-500/20 text-rose-400 border-rose-500/30'
+                            : isExp
+                            ? 'bg-amber-500/20 text-amber-400 border-amber-500/30'
+                            : 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30'
                         }`}>
-                          {lic.status === 'revoked' ? 'Revoked' : lic.is_expired ? 'Expired' : 'Active'}
-                        </span>
-                      </td>
-                      <td className="py-3 px-3 text-right">
-                        <div className="flex items-center justify-end gap-2">
-                          <button
-                            onClick={() => copyLicenseKeyOnly(lic.license_key)}
-                            title="Copy License Key"
-                            className="p-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg transition-colors"
-                          >
-                            <Copy size={13} />
-                          </button>
-                          {lic.status === 'active' && (
+                          {lic.client_name ? lic.client_name.charAt(0).toUpperCase() : 'C'}
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <h4 className="text-sm font-bold text-white">{lic.client_name}</h4>
+                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                              isRevoked
+                                ? 'bg-rose-500/20 text-rose-400 border-rose-500/30'
+                                : isExp
+                                ? 'bg-amber-500/20 text-amber-400 border-amber-500/30'
+                                : 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30'
+                            }`}>
+                              {isRevoked ? '🚫 REVOKED' : isExp ? '⏳ EXPIRED' : '🟢 ACTIVE'}
+                            </span>
+                          </div>
+                          <p className="text-xs text-slate-400 mt-0.5">{lic.client_email || 'No email specified'}</p>
+                        </div>
+                      </div>
+
+                      {/* Right Meta: Issued Date & Quota */}
+                      <div className="flex items-center gap-4 text-xs text-slate-400 sm:text-right">
+                        <div>
+                          <span className="text-[10px] text-slate-500 uppercase block font-semibold">Max WhatsApp Profiles</span>
+                          <span className="font-bold text-emerald-400 font-mono">{lic.sessions_limit} Accounts</span>
+                        </div>
+                        <div className="border-l border-slate-800 pl-4">
+                          <span className="text-[10px] text-slate-500 uppercase block font-semibold">Issued Date</span>
+                          <span className="text-slate-300 font-mono text-[11px]">
+                            {new Date(lic.created_at).toLocaleDateString()}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Middle Row: Specifications Grid */}
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 p-3.5 bg-slate-950/70 rounded-xl border border-slate-800 text-xs">
+                      <div>
+                        <span className="text-[10px] text-slate-500 uppercase font-semibold block mb-0.5">Bound Machine ID</span>
+                        <div className="flex items-center gap-1.5">
+                          <span className="font-mono text-[11px] text-cyan-300 font-bold bg-cyan-950/30 px-2 py-0.5 rounded border border-cyan-500/20 truncate max-w-[200px]">
+                            {lic.machine_id !== '*' ? lic.machine_id : 'Universal (Any PC)'}
+                          </span>
+                          {lic.machine_id !== '*' && (
                             <button
-                              onClick={() => handleRevoke(lic.id, lic.client_name)}
-                              title="Revoke License"
-                              className="p-1.5 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 rounded-lg border border-rose-500/30 transition-colors"
+                              onClick={() => {
+                                navigator.clipboard.writeText(lic.machine_id);
+                                alert('Copied Machine ID: ' + lic.machine_id);
+                              }}
+                              title="Copy Machine ID"
+                              className="p-1 hover:bg-slate-800 text-slate-400 hover:text-white rounded"
                             >
-                              <X size={13} />
+                              <Copy size={11} />
                             </button>
                           )}
                         </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+                      </div>
+
+                      <div>
+                        <span className="text-[10px] text-slate-500 uppercase font-semibold block mb-0.5">Remaining Validity</span>
+                        <p className={`font-semibold ${isRevoked ? 'text-rose-400' : isExp ? 'text-amber-400' : 'text-emerald-400'}`}>
+                          {isRevoked ? 'Access Revoked' : isExp ? 'Expired' : `${lic.days_remaining} Days Remaining`}
+                        </p>
+                        <span className="text-[10px] text-slate-500 block">
+                          Total: {lic.validity_days} Days (Expires: {lic.expires_at ? new Date(lic.expires_at).toLocaleDateString() : 'N/A'})
+                        </span>
+                      </div>
+
+                      <div>
+                        <span className="text-[10px] text-slate-500 uppercase font-semibold block mb-0.5">Enabled Features</span>
+                        <div className="flex flex-wrap gap-1 mt-0.5">
+                          <span className="text-[9px] px-1.5 py-0.5 bg-slate-800 text-slate-300 rounded font-mono">Anti-Ban</span>
+                          <span className="text-[9px] px-1.5 py-0.5 bg-slate-800 text-slate-300 rounded font-mono">Spintax</span>
+                          {lic.turbo_allowed || lic.turboAllowed ? (
+                            <span className="text-[9px] px-1.5 py-0.5 bg-amber-500/20 text-amber-300 rounded font-mono font-bold">Turbo</span>
+                          ) : null}
+                          {lic.multi_session_allowed || lic.multiSessionAllowed ? (
+                            <span className="text-[9px] px-1.5 py-0.5 bg-emerald-500/20 text-emerald-300 rounded font-mono font-bold">Multi-Split</span>
+                          ) : null}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* License Token Box */}
+                    <div className="p-3 bg-slate-950 rounded-xl border border-slate-800/80 space-y-1.5">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] uppercase font-bold tracking-wider text-slate-500">License Key Token (WALIC)</span>
+                        <button
+                          onClick={() => setExpandedKeyId(isExpanded ? null : lic.id)}
+                          className="text-[10px] text-slate-400 hover:text-emerald-400 underline font-mono"
+                        >
+                          {isExpanded ? 'Hide Token' : 'Reveal Full Token'}
+                        </button>
+                      </div>
+                      <p className={`font-mono text-[11px] text-emerald-300/90 break-all select-all bg-slate-900/60 p-2 rounded-lg border border-slate-800/60 ${isExpanded ? '' : 'line-clamp-1'}`}>
+                        {lic.license_key}
+                      </p>
+                    </div>
+
+                    {/* Bottom Action Controls */}
+                    <div className="flex flex-wrap items-center justify-between gap-3 pt-1 border-t border-slate-800/60">
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => copyLicenseKeyOnly(lic.license_key, lic.id)}
+                          className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-white rounded-lg text-xs font-semibold transition flex items-center gap-1.5 shadow"
+                        >
+                          {isCopiedKey ? <Check size={13} className="text-emerald-400" /> : <Copy size={13} />}
+                          <span>{isCopiedKey ? 'Copied Key!' : 'Copy License Key'}</span>
+                        </button>
+
+                        <button
+                          onClick={() => copyWhatsAppFormatForLicense(lic)}
+                          className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-semibold transition flex items-center gap-1.5 shadow"
+                        >
+                          {isCopiedMsg ? <Check size={13} /> : <Send size={13} />}
+                          <span>{isCopiedMsg ? 'Copied for WhatsApp!' : '💬 Copy for WhatsApp'}</span>
+                        </button>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        {isRevoked ? (
+                          <button
+                            onClick={() => handleReactivateLicense(lic)}
+                            title="Restore access for this license"
+                            className="px-3 py-1.5 bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-400 border border-emerald-500/30 rounded-lg text-xs font-semibold transition flex items-center gap-1"
+                          >
+                            <CheckCircle size={13} />
+                            <span>Reactivate License</span>
+                          </button>
+                        ) : (
+                          <button
+                            onClick={() => handleRevokeLicense(lic)}
+                            title="Immediately revoke and block this license"
+                            className="px-3 py-1.5 bg-rose-500/15 hover:bg-rose-500/25 text-rose-400 border border-rose-500/30 rounded-lg text-xs font-semibold transition flex items-center gap-1"
+                          >
+                            <XCircle size={13} />
+                            <span>Revoke License</span>
+                          </button>
+                        )}
+
+                        <button
+                          onClick={() => handleDeleteLicenseRecord(lic)}
+                          title="Delete from list"
+                          className="p-1.5 text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 rounded-lg transition"
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           )}
         </div>
