@@ -522,4 +522,5 @@ export function initDb() {
 
 initDb();
 
+export { db };
 export default db;

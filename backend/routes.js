@@ -963,7 +963,6 @@ router.post('/campaigns', (req, res, next) => {
     const isAutoFragment = autoFragment === 'true' || autoFragment === true ? 'true' : 'false';
     const maxPerWindow = parseInt(fragmentMaxPerWindow) || 25;
     const initialStatus = scheduledAt && new Date(scheduledAt) > new Date() ? 'Scheduled' : 'Pending';
-    const targetUserId = req.user?.id || 1;
 
     const campaignResult = await run(`
       INSERT INTO campaigns (user_id, name, status, total_contacts, sent_count, failed_count, scheduled_at, session_mode, session_name, auto_fragment, fragment_max_per_window)
