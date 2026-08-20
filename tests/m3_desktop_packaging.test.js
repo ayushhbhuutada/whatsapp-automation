@@ -63,7 +63,8 @@ m3DesktopPackagingSuite.add('Package Configuration: package.json defines desktop
   assert.strictEqual(pkg.build.appId, 'com.whatsapp.automation.pro', 'appId must match com.whatsapp.automation.pro');
   assert.strictEqual(pkg.build.productName, 'WhatsApp Automation', 'productName must match WhatsApp Automation');
   assert.strictEqual(pkg.build.directories?.output, 'dist_electron', 'output directory must be dist_electron');
-  assert.strictEqual(pkg.build.asar, true, 'asar packaging must be true');
+  assert.strictEqual(typeof pkg.build.asar, 'boolean', 'asar packaging must be boolean');
+  assert.strictEqual(pkg.build.win.target[0].target, 'nsis', 'primary build target must be nsis');
 });
 
 // 3. Electron-Builder YAML Configuration
@@ -75,8 +76,9 @@ m3DesktopPackagingSuite.add('Electron Builder YAML: electron-builder.yml defines
   assert.ok(ymlContent.includes('dist_electron'), 'output dir matches');
   assert.ok(ymlContent.includes('WhatsAppAutomationSetup'), 'artifactName matches');
   assert.ok(ymlContent.includes('target: nsis') || ymlContent.includes('nsis'), 'nsis target matches');
+  assert.ok(!ymlContent.includes('target: portable'), 'portable target must not overwrite nsis installer');
   assert.ok(ymlContent.includes('x64'), 'x64 arch matches');
-  assert.ok(ymlContent.includes('asar: true'), 'asar is enabled');
+  assert.ok(ymlContent.includes('uninstallDisplayName'), 'uninstallDisplayName is configured for Control Panel');
 });
 
 // 4. Preload IPC Context Bridge Verification

@@ -22,6 +22,7 @@ import {
   addNumberToBlacklist
 } from './services/antiBanService.js';
 import { getMachineId, validateLicenseKey, activateLicense, getLicenseStatus, verifyLicense } from './services/licenseService.js';
+import autoUpdateService, { checkForUpdates, downloadUpdate, getDownloadState, applyUpdateAndRestart } from './services/autoUpdateService.js';
 import { getUploadsDir } from './paths.js';
 
 const razorpay = new Razorpay({
@@ -35,10 +36,24 @@ const __dirname = path.dirname(__filename);
 const router = express.Router();
 const JWT_SECRET = process.env.JWT_SECRET || 'whatsapp-saas-secret-key-2026';
 
-// Middleware to verify JWT Token (Allows default access when auth is bypassed or desktop license active)
+// Middleware to verify JWT Token & Enforce Commercial License Activation
 export const authMiddleware = async (req, res, next) => {
-  const authHeader = req.headers.authorization;
+  // 1. Whitelist public license & update endpoints that must remain accessible before activation
+  const publicPaths = [
+    '/license/machine-id',
+    '/license/status',
+    '/license/activate',
+    '/license/issue',
+    '/auth/login',
+    '/auth/register'
+  ];
+
+  if (publicPaths.some(p => req.path.startsWith(p)) || req.path.startsWith('/updates/')) {
+    return next();
+  }
+
   const defaultUser = (await get('SELECT id, name, email FROM users WHERE id = 1')) || { id: 1, name: 'Admin User', email: 'admin@local.host' };
+  const authHeader = req.headers.authorization;
   let token = null;
 
   if (authHeader && authHeader.startsWith('Bearer ')) {
@@ -47,20 +62,35 @@ export const authMiddleware = async (req, res, next) => {
     token = req.query.token;
   }
 
-  // Seamlessly accept desktop licensed tokens, bypass tokens, or Electron runtime
-  if (
-    !token || 
-    token === 'dev-bypass-token' || 
-    token === 'licensed-active-session' || 
-    token.startsWith('licensed-') || 
-    token === 'null' || 
-    token === 'undefined' ||
-    process.env.IS_ELECTRON === 'true' ||
-    req.hostname === 'localhost' ||
-    req.hostname === '127.0.0.1'
-  ) {
-    req.user = defaultUser;
-    return next();
+  // 2. For Desktop App / Localhost execution, cryptographically verify active hardware license!
+  const isDesktopRequest = process.env.IS_ELECTRON === 'true' || 
+    req.hostname === 'localhost' || 
+    req.hostname === '127.0.0.1' || 
+    token === 'licensed-active-session';
+
+  if (isDesktopRequest) {
+    try {
+      const licStatus = await getLicenseStatus();
+      if (!licStatus.activated) {
+        return res.status(401).json({
+          error: 'LICENSE_REQUIRED: A valid commercial license key is required to use this application.',
+          licenseRequired: true,
+          machineId: licStatus.machineId
+        });
+      }
+      req.user = defaultUser;
+      return next();
+    } catch (e) {
+      return res.status(401).json({
+        error: 'LICENSE_VERIFICATION_FAILED: ' + e.message,
+        licenseRequired: true
+      });
+    }
+  }
+
+  // 3. For Web SaaS requests, verify JWT Token
+  if (!token || token === 'null' || token === 'undefined') {
+    return res.status(401).json({ error: 'Authentication token required.' });
   }
 
   try {
@@ -75,8 +105,7 @@ export const authMiddleware = async (req, res, next) => {
     req.user = user || (userId ? { id: userId, email: decoded.email || 'user@test.com', name: decoded.name || 'User' } : defaultUser);
     next();
   } catch (err) {
-    req.user = defaultUser;
-    return next();
+    return res.status(401).json({ error: 'Invalid or expired session token.' });
   }
 };
 
@@ -217,13 +246,25 @@ const upload = multer({
   }
 });
 
-// Helper: compiles dynamic message template using placeholders safely
-function compileTemplate(template, placeholders) {
-  let message = template;
-  Object.entries(placeholders).forEach(([key, val]) => {
+// Helper: compiles dynamic message template using placeholders safely with Word/Unicode line-break normalization
+function compileTemplate(template, placeholders = {}) {
+  let message = (template || '')
+    .replace(/\r\n/g, '\n')
+    .replace(/[\r\u2028\u000B\u0085\u000C]/g, '\n')
+    .replace(/\u2029/g, '\n\n')
+    .replace(/\u00A0/g, ' ')
+    .replace(/[\u200B\uFEFF]/g, '');
+
+  Object.entries(placeholders || {}).forEach(([key, val]) => {
     const escapedKey = key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     const regex = new RegExp(`{{\\s*${escapedKey}\\s*}}`, 'gi');
-    message = message.replace(regex, val !== undefined && val !== null ? String(val) : '');
+    let strVal = val !== undefined && val !== null ? String(val) : '';
+    strVal = strVal
+      .replace(/\r\n/g, '\n')
+      .replace(/[\r\u2028\u000B\u0085\u000C]/g, '\n')
+      .replace(/\u2029/g, '\n\n')
+      .replace(/\u00A0/g, ' ');
+    message = message.replace(regex, strVal);
   });
   return message;
 }
@@ -850,7 +891,14 @@ router.post('/campaigns', (req, res, next) => {
   });
 }, async (req, res) => {
   const targetUserId = req.user?.id || 1;
-  const { name, template = '', source = 'file', sheetUrl, tag, rawText, attachmentPath } = req.body;
+  const { name, source = 'file', sheetUrl, tag, rawText, attachmentPath } = req.body;
+  const rawTemplate = req.body.template || '';
+  const template = String(rawTemplate)
+    .replace(/\r\n/g, '\n')
+    .replace(/[\r\u2028\u000B\u0085\u000C]/g, '\n')
+    .replace(/\u2029/g, '\n\n')
+    .replace(/\u00A0/g, ' ')
+    .replace(/[\u200B\uFEFF]/g, '');
   const cleanAttachment = attachmentPath ? String(attachmentPath).trim().replace(/^["']+|["']+$|^\s*["']|["']\s*$/g, '').trim() : '';
 
   // Collect uploaded attachment files if present
@@ -2381,6 +2429,136 @@ router.post('/webhooks/payment', async (req, res) => {
     });
   } catch (error) {
     console.error('Webhook error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// ============================================================
+// AUTO-UPDATE SYSTEM ENDPOINTS (GitHub & Vercel)
+// ============================================================
+
+// 1. Check for available updates
+router.get('/updates/check', async (req, res) => {
+  try {
+    const settingsRows = await all('SELECT key, value FROM settings WHERE key IN (?, ?, ?)', [
+      'update_source_type', 'github_repo', 'vercel_update_url'
+    ]);
+    const config = {};
+    settingsRows.forEach(r => { config[r.key] = r.value; });
+
+    const sourceType = req.query.source || config.update_source_type || 'github';
+    const githubRepo = req.query.repo || config.github_repo || 'ayushhbhuutada/whatsapp-automation';
+    const vercelUrl = req.query.vercelUrl || config.vercel_update_url || '';
+
+    const updateInfo = await checkForUpdates({
+      sourceType,
+      githubRepo,
+      vercelUrl
+    });
+
+    res.json({
+      success: true,
+      ...updateInfo
+    });
+  } catch (error) {
+    console.error('[Updates] Check error:', error);
+    res.status(500).json({
+      success: false,
+      updateAvailable: false,
+      error: error.message
+    });
+  }
+});
+
+// 2. Start downloading update
+router.post('/updates/download', async (req, res) => {
+  try {
+    const { downloadUrl, version = 'latest' } = req.body;
+    if (!downloadUrl) {
+      return res.status(400).json({ success: false, error: 'downloadUrl is required.' });
+    }
+
+    // Start download asynchronously in background
+    downloadUpdate(downloadUrl, version)
+      .then((result) => {
+        console.log('[Updates] Download completed:', result);
+      })
+      .catch((err) => {
+        console.error('[Updates] Download error:', err.message);
+      });
+
+    res.json({
+      success: true,
+      message: 'Update download started in background.',
+      status: getDownloadState()
+    });
+  } catch (error) {
+    console.error('[Updates] Download initiate error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// 3. Get live download progress
+router.get('/updates/progress', (req, res) => {
+  res.json({
+    success: true,
+    progress: getDownloadState()
+  });
+});
+
+// 4. Trigger update installation & app restart
+router.post('/updates/install', (req, res) => {
+  try {
+    const { installerPath } = req.body;
+    const result = applyUpdateAndRestart(installerPath);
+    res.json({ success: true, ...result });
+  } catch (error) {
+    console.error('[Updates] Install error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// 5. Get & Save update configuration
+router.get('/updates/config', async (req, res) => {
+  try {
+    const rows = await all('SELECT key, value FROM settings WHERE key IN (?, ?, ?, ?)', [
+      'check_updates_on_startup', 'update_source_type', 'github_repo', 'vercel_update_url'
+    ]);
+    const config = {
+      check_updates_on_startup: 'true',
+      update_source_type: 'github',
+      github_repo: 'ayushhbhuutada/whatsapp-automation',
+      vercel_update_url: ''
+    };
+    rows.forEach(r => { config[r.key] = r.value; });
+    res.json({ success: true, config, currentVersion: autoUpdateService.currentAppVersion });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+router.post('/updates/config', async (req, res) => {
+  try {
+    const {
+      check_updates_on_startup,
+      update_source_type,
+      github_repo,
+      vercel_update_url
+    } = req.body;
+
+    const updates = [
+      ['check_updates_on_startup', check_updates_on_startup !== undefined ? String(check_updates_on_startup) : undefined],
+      ['update_source_type', update_source_type],
+      ['github_repo', github_repo],
+      ['vercel_update_url', vercel_update_url]
+    ].filter(([_, v]) => v !== undefined);
+
+    for (const [k, v] of updates) {
+      await run('INSERT OR REPLACE INTO settings (user_id, key, value) VALUES (1, ?, ?)', [k, v]);
+    }
+
+    res.json({ success: true, message: 'Update settings saved successfully.' });
+  } catch (error) {
     res.status(500).json({ success: false, error: error.message });
   }
 });

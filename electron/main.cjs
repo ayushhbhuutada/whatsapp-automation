@@ -71,13 +71,14 @@ function createSplashWindow() {
 }
 
 /**
- * Updates status text in splash screen
+ * Updates status text and progress percentage in splash screen
  */
-function updateSplashStatus(statusText) {
+function updateSplashStatus(statusText, percent = null) {
   if (splashWindow && !splashWindow.isDestroyed() && splashWindow.webContents) {
-    splashWindow.webContents.executeJavaScript(
-      `var el = document.getElementById('status'); if(el) el.textContent = ${JSON.stringify(statusText)};`
-    ).catch(() => {});
+    const code = typeof percent === 'number'
+      ? `if (window.updateStatus) { window.updateStatus(${JSON.stringify(statusText)}, ${percent}); } else { var el = document.getElementById('status'); if(el) el.textContent = ${JSON.stringify(statusText)}; }`
+      : `if (window.updateStatus) { window.updateStatus(${JSON.stringify(statusText)}); } else { var el = document.getElementById('status'); if(el) el.textContent = ${JSON.stringify(statusText)}; }`;
+    splashWindow.webContents.executeJavaScript(code).catch(() => {});
   }
 }
 
@@ -256,11 +257,61 @@ function registerIpcHandlers() {
       return true;
     }
     return false;
-  });
-
   // 7. Get Application Version
   ipcMain.handle('get-version', () => {
     return app ? app.getVersion() : '1.0.0';
+  });
+
+  // 8. Auto-Update Check
+  ipcMain.handle('check-for-updates', async (event, options = {}) => {
+    try {
+      const url = getServiceUrl('../backend/services/autoUpdateService.js');
+      const { checkForUpdates } = await import(url);
+      return await checkForUpdates(options);
+    } catch (e) {
+      return { updateAvailable: false, error: e.message };
+    }
+  });
+
+  // 9. Auto-Update Download
+  ipcMain.handle('download-update', async (event, { downloadUrl, version = 'latest' } = {}) => {
+    try {
+      const url = getServiceUrl('../backend/services/autoUpdateService.js');
+      const { downloadUpdate } = await import(url);
+      return await downloadUpdate(downloadUrl, version, (progress) => {
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.send('update-progress', progress);
+        }
+      });
+    } catch (e) {
+      return { success: false, error: e.message };
+    }
+  });
+
+  // 10. Auto-Update Install & Restart
+  ipcMain.handle('install-update', async (event, { installerPath } = {}) => {
+    try {
+      const url = getServiceUrl('../backend/services/autoUpdateService.js');
+      const { applyUpdateAndRestart } = await import(url);
+      const res = applyUpdateAndRestart(installerPath);
+      setTimeout(() => {
+        if (app) app.quit();
+      }, 800);
+      return res;
+    } catch (e) {
+      return { success: false, error: e.message };
+    }
+  });
+
+  // 11. Auto-Update Progress State
+  ipcMain.handle('get-update-progress', async () => {
+    try {
+      const url = getServiceUrl('../backend/services/autoUpdateService.js');
+      const { getDownloadState } = await import(url);
+      return getDownloadState();
+    } catch (e) {
+      return { isDownloading: false, error: e.message };
+    }
   });
 }
 
@@ -384,11 +435,48 @@ if (app) {
   app.whenReady().then(async () => {
     // 1. Immediately display instant startup splash dialog (0.1s response)
     createSplashWindow();
-    updateSplashStatus('Initializing local environment...');
+    updateSplashStatus('Checking for updates...');
 
     registerIpcHandlers();
 
-    // 2. Find open local port
+    // 2. Perform Auto-Update Check on Startup
+    try {
+      const url = getServiceUrl('../backend/services/autoUpdateService.js');
+      const { checkForUpdates, downloadUpdate, applyUpdateAndRestart } = await import(url);
+      
+      // Fast check with 4-second safety timeout so app never blocks on offline/slow networks
+      const updatePromise = checkForUpdates();
+      const timeoutPromise = new Promise((resolve) => setTimeout(() => resolve({ updateAvailable: false, timedOut: true }), 4000));
+      const updateInfo = await Promise.race([updatePromise, timeoutPromise]);
+
+      if (updateInfo && updateInfo.updateAvailable && updateInfo.downloadUrl) {
+        updateSplashStatus(`Update found: v${updateInfo.latestVersion} (Auto updating...)`, 5);
+        
+        try {
+          const downloadRes = await downloadUpdate(updateInfo.downloadUrl, updateInfo.latestVersion, (progress) => {
+            updateSplashStatus(`Auto updating... (${progress.percent}%)`, progress.percent);
+          });
+
+          if (downloadRes && downloadRes.installerPath) {
+            updateSplashStatus('Update downloaded! Restarting to apply...', 100);
+            await new Promise((r) => setTimeout(r, 1200));
+            applyUpdateAndRestart(downloadRes.installerPath);
+            if (app) app.quit();
+            return;
+          }
+        } catch (downloadErr) {
+          console.warn('[AutoUpdater] Startup update download failed, launching current version:', downloadErr.message);
+          updateSplashStatus('Launching current version...');
+        }
+      } else {
+        updateSplashStatus('Application is up to date.');
+      }
+    } catch (err) {
+      console.warn('[AutoUpdater] Startup update check skipped:', err.message);
+      updateSplashStatus('Initializing local environment...');
+    }
+
+    // 3. Find open local port
     updateSplashStatus('Locating available network port...');
     try {
       selectedPort = await findAvailablePort(5000, 5010);
@@ -396,14 +484,14 @@ if (app) {
       selectedPort = 5000;
     }
 
-    // 3. Start local automation backend server IN BACKGROUND (non-blocking)
+    // 4. Start local automation backend server IN BACKGROUND (non-blocking)
     // Window opens immediately; frontend retries API calls until backend is ready.
     updateSplashStatus('Starting automation engine in background...');
     startBackendServer(selectedPort).catch((err) => {
       console.error('[Electron Main] Backend startup error:', err);
     });
 
-    // 4. Open workspace window immediately (no need to wait for backend)
+    // 5. Open workspace window immediately (no need to wait for backend)
     updateSplashStatus('Opening workspace interface...');
     createWindow(selectedPort);
     createTray();

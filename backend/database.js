@@ -455,7 +455,11 @@ export function initDb() {
     { key: 'enable_cooldown_enforcement', value: 'true' },
     { key: 'enable_night_pause', value: 'false' },
     { key: 'night_pause_start_hour', value: '23' },
-    { key: 'night_pause_end_hour', value: '7' }
+    { key: 'night_pause_end_hour', value: '7' },
+    { key: 'check_updates_on_startup', value: 'true' },
+    { key: 'update_source_type', value: 'github' },
+    { key: 'github_repo', value: 'ayushhbhuutada/whatsapp-automation' },
+    { key: 'vercel_update_url', value: '' }
   ];
 
   const insertSetting = db.prepare(`INSERT OR IGNORE INTO settings (user_id, key, value) VALUES (?, ?, ?)`);

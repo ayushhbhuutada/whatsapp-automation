@@ -12,14 +12,31 @@ function formatLocalDate(d = new Date()) {
   return `${y}-${m}-${day}`;
 }
 
+/**
+ * Normalizes all line-break variants (Microsoft Word, Unicode separators, CRLF, vertical tabs)
+ * into standard clean UNIX newlines for WhatsApp Web.
+ * @param {string} text 
+ * @returns {string}
+ */
+export function normalizeMessageLineBreaks(text) {
+  if (!text || typeof text !== 'string') return text || '';
+  return text
+    .replace(/\r\n/g, '\n')
+    .replace(/[\r\u2028\u000B\u0085\u000C]/g, '\n')
+    .replace(/\u2029/g, '\n\n')
+    .replace(/\u00A0/g, ' ')
+    .replace(/[\u200B\uFEFF]/g, '');
+}
+
 // 1. Spintax Parser Engine
 export function parseSpintax(text, options = {}) {
-  if (!text || typeof text !== 'string') return text;
+  if (!text || typeof text !== 'string') return text || '';
 
   const safeOptions = options || {};
   const { enableSpintax = true, enableAutoEmoji = false } = safeOptions;
 
-  let result = text;
+  // Always normalize Microsoft Word and non-standard Unicode line breaks first
+  let result = normalizeMessageLineBreaks(text);
 
   // Mask double-braced variables (e.g. {{name}}, {{phone}}) to preserve them during spintax parsing
   const doubleBraceMap = [];
@@ -55,7 +72,7 @@ export function parseSpintax(text, options = {}) {
     const randomEmoji = friendlyEmojis[Math.floor(Math.random() * friendlyEmojis.length)];
     // Add space + emoji if not already ending with emoji
     if (!/[\u{1F300}-\u{1F9FF}]/u.test(result.slice(-2))) {
-      result = `${result.trim()} ${randomEmoji}`;
+      result = `${result.replace(/[ \t]+$/, '')} ${randomEmoji}`;
     }
   }
 
@@ -475,21 +492,22 @@ export function isNightQuietHours(settings = {}, currentHour = null) {
  */
 export function buildSpintaxFromMessages(messages = [], mode = 'full') {
   if (!Array.isArray(messages)) return '';
-  const cleanMsgs = messages.map(m => (m || '').trim()).filter(Boolean);
+  const cleanMsgs = messages.filter(m => typeof m === 'string' && m.trim().length > 0);
   if (cleanMsgs.length === 0) return '';
   if (cleanMsgs.length === 1) return cleanMsgs[0];
 
   if (mode === 'sentence') {
-    // Split each message into non-empty lines or sentences
-    const splitLines = cleanMsgs.map(m => m.split(/\r?\n+/).map(l => l.trim()).filter(Boolean));
+    // Split each message into lines while preserving intentional line breaks / paragraph gaps
+    const splitLines = cleanMsgs.map(m => m.split(/\r?\n/));
     const maxLines = Math.max(...splitLines.map(lines => lines.length));
     const fusedLines = [];
 
     for (let lineIdx = 0; lineIdx < maxLines; lineIdx++) {
       const lineOptions = [];
       splitLines.forEach(lines => {
-        if (lines[lineIdx] && !lineOptions.includes(lines[lineIdx])) {
-          lineOptions.push(lines[lineIdx]);
+        const val = lines[lineIdx] !== undefined ? lines[lineIdx] : '';
+        if (!lineOptions.includes(val)) {
+          lineOptions.push(val);
         }
       });
 
@@ -501,10 +519,10 @@ export function buildSpintaxFromMessages(messages = [], mode = 'full') {
       }
     }
 
-    return fusedLines.join('\n\n');
+    return fusedLines.join('\n');
   }
 
-  // Mode 'full': wrap all message variants into single spintax group
+  // Mode 'full': wrap all message variants into single spintax group, strictly preserving all internal line breaks
   return `{${cleanMsgs.join('|')}}`;
 }
 
@@ -736,27 +754,14 @@ export function deepDiversifyMessage(text, settings = {}) {
     });
   }
   
-  // 2. Safe trailing whitespace variation (standard spaces only, no invisible unicode characters)
+  // 2. Safe trailing whitespace variation (without removing internal or final newlines)
   const trailingVariations = ['', ' ', '  '];
-  result = result.trimEnd() + trailingVariations[Math.floor(Math.random() * trailingVariations.length)];
+  result = result.replace(/[ \t]+$/, '') + trailingVariations[Math.floor(Math.random() * trailingVariations.length)];
   
-  // 4. Random paragraph break insertion for long messages (>100 chars)
-  if (result.length > 100 && Math.random() > 0.5) {
-    const sentences = result.split(/(?<=[.!?])\s+/);
-    if (sentences.length >= 3) {
-      // Insert an extra newline break after a random sentence
-      const breakPos = 1 + Math.floor(Math.random() * (sentences.length - 2));
-      sentences[breakPos] = sentences[breakPos] + '\n';
-      result = sentences.join(' ');
-    }
-  }
-  
-  // 5. Micro-capitalization variation for first words
+  // 3. Micro-capitalization variation for first words (casual greeting starts only)
   if (Math.random() > 0.7 && result.length > 0) {
-    // Very occasionally lowercase the first character (informal style)
-    // Only if it's a casual greeting-like start
     const casualStarts = ['hi', 'hey', 'hello', 'hii', 'yo'];
-    const firstWord = result.split(' ')[0].toLowerCase();
+    const firstWord = result.split(/[\s\n]+/)[0]?.toLowerCase();
     if (casualStarts.includes(firstWord)) {
       result = result[0].toLowerCase() + result.slice(1);
     }

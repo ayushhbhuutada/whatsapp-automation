@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import SessionManager from './components/SessionManager';
+import AutoUpdateModal from './components/AutoUpdateModal';
 import axios from 'axios';
 import { 
   generateClientSideLicense, 
@@ -91,6 +92,16 @@ const getApiServer = () => {
 const API_SERVER = getApiServer();
 const API_BASE = `${API_SERVER}/api`;
 
+export const normalizeWordLineBreaks = (text) => {
+  if (!text || typeof text !== 'string') return text || '';
+  return text
+    .replace(/\r\n/g, '\n')
+    .replace(/[\r\u2028\u000B\u0085\u000C]/g, '\n')
+    .replace(/\u2029/g, '\n\n')
+    .replace(/\u00A0/g, ' ')
+    .replace(/[\u200B\uFEFF]/g, '');
+};
+
 export default function App() {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [campaigns, setCampaigns] = useState([]);
@@ -135,6 +146,7 @@ export default function App() {
     // Reject dev-bypass token — only honor real license activation tokens
     return (savedToken && savedToken !== 'dev-bypass-token') ? savedToken : null;
   });
+  const [isVerifyingLicense, setIsVerifyingLicense] = useState(true);
   const [authMode, setAuthMode] = useState('license');
   const [authFormData, setAuthFormData] = useState({ name: '', email: '', password: '', licenseKey: '' });
   const [detectedMachineId, setDetectedMachineId] = useState('');
@@ -149,6 +161,68 @@ export default function App() {
   const [showAdminLoginModal, setShowAdminLoginModal] = useState(false);
   const [adminPasswordInput, setAdminPasswordInput] = useState('');
   const [adminLoginError, setAdminLoginError] = useState('');
+
+  // Auto-Updater State
+  const [showUpdateModal, setShowUpdateModal] = useState(false);
+  const [updateModalMode, setUpdateModalMode] = useState('check');
+  const [appVersion, setAppVersion] = useState('1.0.0');
+  const [hasUpdateBadge, setHasUpdateBadge] = useState(false);
+
+  // Rigorous Hardware License Verification on App Startup
+  useEffect(() => {
+    let active = true;
+
+    const checkLicenseOnStartup = async () => {
+      try {
+        let status = null;
+        if (window.electronAPI?.getLicenseStatus) {
+          try {
+            status = await window.electronAPI.getLicenseStatus();
+          } catch (_e) {}
+        }
+        if (!status) {
+          const res = await axios.get(`${API_BASE}/license/status`).catch(() => null);
+          status = res?.data;
+        }
+
+        if (!active) return;
+
+        if (status && status.activated) {
+          const lic = status.license || {};
+          const clientUser = {
+            id: 1,
+            name: lic.customer || 'Licensed Client',
+            email: lic.customer ? `${String(lic.customer).toLowerCase().replace(/\s+/g, '')}@desktop.pro` : 'client@pro.desktop',
+            role: 'Owner',
+            max_login_sessions: lic.maxSessions || 5
+          };
+          setUser(clientUser);
+          setToken('licensed-active-session');
+          localStorage.setItem('user', JSON.stringify(clientUser));
+          localStorage.setItem('token', 'licensed-active-session');
+        } else {
+          // Fresh install or unactivated machine: wipe stale token & force key activation gate
+          localStorage.removeItem('token');
+          localStorage.removeItem('user');
+          setUser(null);
+          setToken(null);
+          if (status?.machineId) {
+            setDetectedMachineId(status.machineId);
+          }
+        }
+      } catch (err) {
+        localStorage.removeItem('token');
+        localStorage.removeItem('user');
+        setUser(null);
+        setToken(null);
+      } finally {
+        if (active) setIsVerifyingLicense(false);
+      }
+    };
+
+    checkLicenseOnStartup();
+    return () => { active = false; };
+  }, []);
 
   useEffect(() => {
     let attempts = 0;
@@ -180,6 +254,31 @@ export default function App() {
     };
     fetchMachineId();
     return () => { if (retryTimer) clearTimeout(retryTimer); };
+  }, []);
+
+  // 2. Fetch App Version & Run Background Update Discovery
+  useEffect(() => {
+    if (window.electronAPI?.getVersion) {
+      window.electronAPI.getVersion().then(v => { if (v) setAppVersion(v); }).catch(() => {});
+    }
+
+    const checkUpdatesSilently = async () => {
+      try {
+        let resData = null;
+        if (window.electronAPI?.checkForUpdates) {
+          resData = await window.electronAPI.checkForUpdates();
+        } else {
+          const res = await axios.get(`${API_BASE}/updates/check`);
+          resData = res.data;
+        }
+        if (resData && resData.updateAvailable) {
+          setHasUpdateBadge(true);
+        }
+      } catch (_e) {}
+    };
+
+    const timer = setTimeout(checkUpdatesSilently, 3500);
+    return () => clearTimeout(timer);
   }, []);
 
   // Set axios auth header
@@ -501,6 +600,22 @@ export default function App() {
     );
   }
 
+  if (isVerifyingLicense && isDesktopApp) {
+    return (
+      <div className="min-h-screen bg-slate-950 flex items-center justify-center p-4">
+        <div className="flex flex-col items-center justify-center space-y-4 text-center animate-pulse">
+          <div className="w-12 h-12 rounded-2xl bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
+            <RefreshCw size={24} className="animate-spin" />
+          </div>
+          <div className="space-y-1">
+            <h4 className="text-sm font-bold text-white">Checking Commercial License Node-Lock...</h4>
+            <p className="text-xs text-slate-400 font-mono">Authenticating hardware signature with engine</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   // ============================================================================
   // DESKTOP APP (.EXE) PRODUCT ACTIVATION & AUTH SPLASH SCREEN
   // ============================================================================
@@ -698,6 +813,28 @@ export default function App() {
               <SettingsIcon size={18} />
               Settings
             </button>
+
+            {/* Prominent Auto-Update Navigation Button */}
+            <button 
+              type="button"
+              onClick={() => {
+                setUpdateModalMode('check');
+                setShowUpdateModal(true);
+              }}
+              className="w-full flex items-center justify-between px-4 py-3 rounded-xl transition-all duration-200 text-sm font-medium bg-gradient-to-r from-emerald-950/40 via-slate-900 to-slate-900 border border-emerald-500/35 text-emerald-300 hover:border-emerald-500/70 hover:bg-emerald-950/60 shadow-sm group cursor-pointer"
+            >
+              <div className="flex items-center gap-3">
+                <Sparkles size={18} className="text-emerald-400 group-hover:rotate-12 transition-transform" />
+                <span className="font-semibold">Auto-Update</span>
+              </div>
+              <span className={`text-[10px] font-mono px-2 py-0.5 rounded-full border ${
+                hasUpdateBadge
+                  ? 'bg-emerald-500 text-slate-950 font-bold border-emerald-400 animate-pulse'
+                  : 'bg-slate-800 text-emerald-400 border-slate-700'
+              }`}>
+                {hasUpdateBadge ? 'Update!' : `v${appVersion}`}
+              </span>
+            </button>
           </nav>
         </div>
 
@@ -806,6 +943,28 @@ export default function App() {
                 </button>
               </div>
             )}
+
+            {/* Check for Updates Topbar Trigger */}
+            <button
+              type="button"
+              onClick={() => {
+                setUpdateModalMode('check');
+                setShowUpdateModal(true);
+              }}
+              className={`px-3.5 py-1.5 rounded-xl border text-xs font-bold flex items-center gap-2 transition-all shadow-sm ${
+                hasUpdateBadge
+                  ? 'bg-emerald-500 text-slate-950 border-emerald-400 shadow-emerald-500/25 animate-pulse'
+                  : 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300 hover:bg-emerald-500/20 hover:text-white'
+              }`}
+              title="Check for software updates (GitHub Releases & Vercel)"
+            >
+              <Sparkles size={14} className={hasUpdateBadge ? 'text-slate-950' : 'text-emerald-400'} />
+              <span>Check for Updates</span>
+              <span className="text-[10px] font-mono opacity-80">(v{appVersion})</span>
+              {hasUpdateBadge ? (
+                <span className="w-2 h-2 rounded-full bg-slate-950 animate-ping" />
+              ) : null}
+            </button>
 
             <button 
               onClick={triggerRefresh}
@@ -928,6 +1087,15 @@ export default function App() {
           )}
         </div>
       </main>
+
+      {/* Auto-Update Modal Dialogue Box */}
+      <AutoUpdateModal
+        isOpen={showUpdateModal}
+        onClose={() => setShowUpdateModal(false)}
+        apiBase={API_BASE}
+        initialMode={updateModalMode}
+        currentVersion={appVersion}
+      />
     </div>
   );
 }
@@ -2339,13 +2507,27 @@ function CreateCampaignView({ onSuccess, settings, campaigns = [], duplicateCamp
             </div>
           </div>
           <textarea
-            rows={4}
+            rows={5}
             placeholder="Hello {{Name}}, thank you for choosing {{Company}}..."
             value={template}
-            onChange={(e) => setTemplate(e.target.value)}
-            className="w-full glass-input rounded-xl p-4 text-slate-200 text-sm font-sans leading-relaxed"
+            onChange={(e) => setTemplate(normalizeWordLineBreaks(e.target.value))}
+            onPaste={(e) => {
+              e.preventDefault();
+              const pasted = (e.clipboardData || window.clipboardData)?.getData('text') || '';
+              const clean = normalizeWordLineBreaks(pasted);
+              const target = e.target;
+              const start = target.selectionStart || 0;
+              const end = target.selectionEnd || 0;
+              const currentVal = template || '';
+              const newVal = currentVal.substring(0, start) + clean + currentVal.substring(end);
+              setTemplate(newVal);
+              setTimeout(() => {
+                target.selectionStart = target.selectionEnd = start + clean.length;
+              }, 0);
+            }}
+            className="w-full glass-input rounded-xl p-4 text-slate-200 text-sm font-sans leading-relaxed whitespace-pre-wrap resize-y"
           />
-          <span className="text-[10px] text-slate-500 block">Use &#123;&#123;Name&#125;&#125; or &#123;&#123;Company&#125;&#125; for automatic recipient replacement.</span>
+          <span className="text-[10px] text-slate-500 block">Use &#123;&#123;Name&#125;&#125; or &#123;&#123;Company&#125;&#125; for automatic recipient replacement. Line gaps and spacing will be sent exactly as written.</span>
         </div>
 
         {/* Multi-Device WhatsApp Load Balancing & Custom Account Selector */}
@@ -2669,14 +2851,14 @@ function CreateCampaignView({ onSuccess, settings, campaigns = [], duplicateCamp
         </div>
 
         {template.trim() && (
-          <div className="p-4 bg-emerald-950/30 border border-emerald-500/20 rounded-xl space-y-1">
+          <div className="p-4 bg-emerald-950/30 border border-emerald-500/20 rounded-xl space-y-1.5">
             <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-400 block">Live Sample Preview</span>
-            <p className="text-xs text-slate-300 whitespace-pre-wrap font-sans">
+            <div className="text-xs text-slate-200 whitespace-pre-wrap font-sans leading-relaxed break-words bg-slate-900/60 p-3 rounded-lg border border-slate-800/80">
               {template
                 .replace(/{{\s*name\s*}}/gi, 'John Doe')
                 .replace(/{{\s*company\s*}}/gi, 'Acme Corp')
                 .replace(/{{\s*phone\s*}}/gi, '+919876543210')}
-            </p>
+            </div>
           </div>
         )}
 
@@ -2898,11 +3080,25 @@ function SpintaxStudioView({ onUseInCampaign }) {
                 </div>
 
                 <textarea
-                  rows={3}
+                  rows={4}
                   value={msg}
-                  onChange={(e) => updateMessage(idx, e.target.value)}
-                  placeholder={`Write variation #${idx + 1}... e.g. Hello {{Name}}, check out our deals!`}
-                  className="w-full glass-input rounded-xl p-3 text-slate-200 text-xs font-sans leading-relaxed"
+                  onChange={(e) => updateMessage(idx, normalizeWordLineBreaks(e.target.value))}
+                  onPaste={(e) => {
+                    e.preventDefault();
+                    const pasted = (e.clipboardData || window.clipboardData)?.getData('text') || '';
+                    const clean = normalizeWordLineBreaks(pasted);
+                    const target = e.target;
+                    const start = target.selectionStart || 0;
+                    const end = target.selectionEnd || 0;
+                    const currentVal = msg || '';
+                    const newVal = currentVal.substring(0, start) + clean + currentVal.substring(end);
+                    updateMessage(idx, newVal);
+                    setTimeout(() => {
+                      target.selectionStart = target.selectionEnd = start + clean.length;
+                    }, 0);
+                  }}
+                  placeholder={`Write variation #${idx + 1}... e.g.\nHello {{Name}},\n\nSpecial offer for {{Company}} today!`}
+                  className="w-full glass-input rounded-xl p-3 text-slate-200 text-xs font-sans leading-relaxed whitespace-pre-wrap resize-y"
                 />
 
                 <div className="flex items-center justify-between text-[10px] text-slate-500">
@@ -2933,7 +3129,7 @@ function SpintaxStudioView({ onUseInCampaign }) {
                 rows={6}
                 readOnly
                 value={structuredSpintax}
-                className="w-full bg-slate-950 border border-slate-800 text-purple-300 text-xs font-mono p-3.5 rounded-xl leading-relaxed focus:outline-none select-all"
+                className="w-full bg-slate-950 border border-slate-800 text-purple-300 text-xs font-mono p-3.5 rounded-xl leading-relaxed focus:outline-none select-all whitespace-pre-wrap resize-y"
               />
             </div>
 
@@ -2998,12 +3194,14 @@ function SpintaxStudioView({ onUseInCampaign }) {
                     .replace(/{{\s*company\s*}}/gi, companies[idx % companies.length]);
 
                   return (
-                    <div key={idx} className="p-3 bg-slate-900/70 border border-slate-800 rounded-xl space-y-1">
+                    <div key={idx} className="p-3 bg-slate-900/70 border border-slate-800 rounded-xl space-y-1.5">
                       <div className="flex items-center justify-between text-[10px] text-slate-400">
                         <span className="font-bold text-emerald-400">Sample #{idx + 1} (Recipient: {names[idx % names.length]})</span>
                         <span className="text-slate-500">Live Spun</span>
                       </div>
-                      <p className="text-xs text-slate-200 leading-relaxed font-sans">{rendered}</p>
+                      <div className="text-xs text-slate-200 leading-relaxed font-sans whitespace-pre-wrap break-words bg-slate-950/60 p-2.5 rounded-lg border border-slate-800/50">
+                        {rendered}
+                      </div>
                     </div>
                   );
                 })
@@ -3213,6 +3411,11 @@ function SettingsView({ settings, onSave }) {
   const [attachmentsDir, setAttachmentsDir] = useState('');
   const [enableNotifications, setEnableNotifications] = useState(true);
   const [keepBrowserOpen, setKeepBrowserOpen] = useState(true);
+  const [checkUpdatesOnStartup, setCheckUpdatesOnStartup] = useState(true);
+  const [updateSourceType, setUpdateSourceType] = useState('github');
+  const [githubRepo, setGithubRepo] = useState('ayushhbhuutada/whatsapp-automation');
+  const [vercelUpdateUrl, setVercelUpdateUrl] = useState('');
+  const [showSettingsUpdateModal, setShowSettingsUpdateModal] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [statusMessage, setStatusMessage] = useState(null);
 
@@ -3242,6 +3445,10 @@ function SettingsView({ settings, onSave }) {
     if (settings.default_attachments_dir) setAttachmentsDir(String(settings.default_attachments_dir));
     if (settings.enable_notifications) setEnableNotifications(settings.enable_notifications === 'true' || settings.enable_notifications === true);
     if (settings.keep_browser_open_after_campaign !== undefined) setKeepBrowserOpen(settings.keep_browser_open_after_campaign === 'true' || settings.keep_browser_open_after_campaign === true);
+    if (settings.check_updates_on_startup !== undefined) setCheckUpdatesOnStartup(settings.check_updates_on_startup === 'true' || settings.check_updates_on_startup === true);
+    if (settings.update_source_type) setUpdateSourceType(String(settings.update_source_type));
+    if (settings.github_repo) setGithubRepo(String(settings.github_repo));
+    if (settings.vercel_update_url) setVercelUpdateUrl(String(settings.vercel_update_url));
   }, [settings]);
 
   const handleSubmit = async (e) => {
@@ -3269,10 +3476,14 @@ function SettingsView({ settings, onSave }) {
         headless: headless ? 'true' : 'false',
         default_attachments_dir: attachmentsDir,
         enable_notifications: enableNotifications ? 'true' : 'false',
-        keep_browser_open_after_campaign: keepBrowserOpen ? 'true' : 'false'
+        keep_browser_open_after_campaign: keepBrowserOpen ? 'true' : 'false',
+        check_updates_on_startup: checkUpdatesOnStartup ? 'true' : 'false',
+        update_source_type: updateSourceType,
+        github_repo: githubRepo,
+        vercel_update_url: vercelUpdateUrl
       });
       if (onSave) onSave();
-      setStatusMessage({ type: 'success', text: 'System configuration & rate limiter saved successfully.' });
+      setStatusMessage({ type: 'success', text: 'System configuration & auto-update parameters saved successfully.' });
     } catch (error) {
       console.error(error);
       setStatusMessage({ type: 'error', text: `Failed to save settings: ${error.message}` });
@@ -3475,6 +3686,90 @@ function SettingsView({ settings, onSave }) {
             </div>
           </div>
         </div>
+
+        {/* Software Auto-Update System Card */}
+        <div className="p-5 rounded-2xl bg-gradient-to-r from-slate-900/90 to-emerald-950/20 border border-emerald-500/25 space-y-4">
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <div className="flex items-center gap-2.5">
+              <div className="p-2 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400">
+                <Zap size={18} />
+              </div>
+              <div>
+                <h4 className="text-sm font-bold text-white">Software Auto-Update System</h4>
+                <p className="text-[11px] text-slate-400">Automatic version check on startup via GitHub Releases &amp; Vercel</p>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setShowSettingsUpdateModal(true)}
+              className="px-3.5 py-1.5 bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/40 text-emerald-300 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shadow-sm"
+            >
+              <Sparkles size={13} />
+              <span>Check for Updates Now</span>
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2 border-t border-slate-800/80">
+            <div>
+              <label className="text-xs font-semibold text-slate-300 block mb-1">Update Source Channel</label>
+              <select
+                value={updateSourceType}
+                onChange={e => setUpdateSourceType(e.target.value)}
+                className="w-full glass-input rounded-xl px-3 py-2 text-slate-200 text-xs"
+              >
+                <option value="github">GitHub Releases (Official)</option>
+                <option value="vercel">Vercel / Custom API Endpoint</option>
+              </select>
+            </div>
+
+            {updateSourceType === 'github' ? (
+              <div>
+                <label className="text-xs font-semibold text-slate-300 block mb-1">GitHub Repository (owner/repo)</label>
+                <input
+                  type="text"
+                  value={githubRepo}
+                  onChange={e => setGithubRepo(e.target.value)}
+                  placeholder="ayushhbhuutada/whatsapp-automation"
+                  className="w-full glass-input rounded-xl px-3 py-2 text-slate-200 text-xs font-mono"
+                />
+              </div>
+            ) : (
+              <div>
+                <label className="text-xs font-semibold text-slate-300 block mb-1">Vercel Update Check Endpoint URL</label>
+                <input
+                  type="url"
+                  value={vercelUpdateUrl}
+                  onChange={e => setVercelUpdateUrl(e.target.value)}
+                  placeholder="https://your-domain.vercel.app/api/updates/check"
+                  className="w-full glass-input rounded-xl px-3 py-2 text-slate-200 text-xs font-mono"
+                />
+              </div>
+            )}
+          </div>
+
+          <div className="flex items-center gap-3 pt-1">
+            <input
+              id="chkStartup"
+              type="checkbox"
+              checked={checkUpdatesOnStartup}
+              onChange={e => setCheckUpdatesOnStartup(e.target.checked)}
+              className="w-4 h-4 text-emerald-600 bg-slate-900 border-slate-800 rounded focus:ring-emerald-500 cursor-pointer"
+            />
+            <label htmlFor="chkStartup" className="text-xs text-slate-300 cursor-pointer select-none">
+              Automatically check for updates on application startup (displays startup dialogue box)
+            </label>
+          </div>
+        </div>
+
+        {/* Local Update Modal for Settings Trigger */}
+        <AutoUpdateModal
+          isOpen={showSettingsUpdateModal}
+          onClose={() => setShowSettingsUpdateModal(false)}
+          apiBase={API_BASE}
+          initialMode="check"
+          currentVersion={settings.version || '1.0.0'}
+        />
 
         {/* Submit */}
         <button
@@ -4500,14 +4795,14 @@ function AntiBanSuiteView({ settings, onSave }) {
               <Sparkles size={12}/> Auto-Spin (Multi-Lang)
             </button>
           </div>
-          <textarea rows={2} value={tmpl} onChange={e => setTmpl(e.target.value)} className="w-full glass-input rounded-xl px-3 py-2 text-slate-200 text-xs font-mono" />
+          <textarea rows={3} value={tmpl} onChange={e => setTmpl(e.target.value)} className="w-full glass-input rounded-xl px-3 py-2 text-slate-200 text-xs font-mono whitespace-pre-wrap resize-y" />
           <div className="flex items-center gap-2">
             <button onClick={testSpintax} className="btn-primary text-xs py-1.5 px-3"><Sparkles size={12}/> Test Variation</button>
             <button onClick={autoSpinText} className="bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 border border-cyan-500/40 rounded-xl text-xs py-1.5 px-3 font-semibold flex items-center gap-1 transition-colors">
               <Sparkles size={12}/> ✨ Auto-Generate Spintax
             </button>
           </div>
-          {tmplResult && <div className="p-3 bg-slate-900 border border-slate-700 rounded-lg text-xs text-emerald-400 font-mono">→ {tmplResult}</div>}
+          {tmplResult && <div className="p-3 bg-slate-900 border border-slate-700 rounded-lg text-xs text-emerald-400 font-mono whitespace-pre-wrap break-words">→ {tmplResult}</div>}
         </div>
       </div>
 

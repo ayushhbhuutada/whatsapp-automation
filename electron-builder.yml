@@ -18,16 +18,17 @@ win:
     - target: nsis
       arch:
         - x64
-    - target: portable
-      arch:
-        - x64
   executableName: WhatsAppAutomation
   signAndEditExecutable: false
   verifyUpdateCodeSignature: false
 nsis:
   oneClick: false
+  perMachine: false
+  allowElevation: true
   allowToChangeInstallationDirectory: true
   createDesktopShortcut: true
   createStartMenuShortcut: true
   shortcutName: WhatsApp Automation
+  uninstallDisplayName: WhatsApp Automation
+  deleteAppDataOnUninstall: false
   runAfterFinish: true

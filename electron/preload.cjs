@@ -7,7 +7,17 @@ const desktopAPI = {
   openExternal: (url) => ipcRenderer.invoke('open-external', url),
   getAppPaths: () => ipcRenderer.invoke('get-app-paths'),
   showItemInFolder: (path) => ipcRenderer.invoke('show-item-in-folder', path),
-  getVersion: () => ipcRenderer.invoke('get-version')
+  getVersion: () => ipcRenderer.invoke('get-version'),
+  checkForUpdates: (options) => ipcRenderer.invoke('check-for-updates', options),
+  downloadUpdate: (payload) => ipcRenderer.invoke('download-update', payload),
+  installUpdate: (payload) => ipcRenderer.invoke('install-update', payload),
+  getUpdateProgress: () => ipcRenderer.invoke('get-update-progress'),
+  onUpdateStatus: (callback) => {
+    ipcRenderer.on('update-status', (event, data) => callback(data));
+  },
+  onUpdateProgress: (callback) => {
+    ipcRenderer.on('update-progress', (event, data) => callback(data));
+  }
 };
 
 // Expose secure API to renderer process

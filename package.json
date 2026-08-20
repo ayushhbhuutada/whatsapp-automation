@@ -15,7 +15,8 @@
     "build:electron": "npm --prefix frontend run build && electron-builder --win nsis",
     "build:installer": "npm --prefix frontend run build && electron-builder --win nsis",
     "build:exe": "npm --prefix frontend run build && electron-builder --win nsis",
-    "dist": "npm --prefix frontend run build && electron-builder --win nsis"
+    "dist": "npm --prefix frontend run build && electron-builder --win nsis",
+    "dist:portable": "npm --prefix frontend run build && electron-builder --win portable"
   },
   "dependencies": {
     "bcryptjs": "^3.0.3",
@@ -76,10 +77,14 @@
     },
     "nsis": {
       "oneClick": false,
+      "perMachine": false,
+      "allowElevation": true,
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
       "shortcutName": "WhatsApp Automation",
+      "uninstallDisplayName": "WhatsApp Automation",
+      "deleteAppDataOnUninstall": true,
       "runAfterFinish": true
     }
   }

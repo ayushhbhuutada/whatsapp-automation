@@ -695,7 +695,14 @@ class OpenWAService {
         } catch (presenceErr) {}
       }
 
-      const msg = await client.sendMessage(chatId, text);
+      const cleanText = (text || '')
+        .replace(/\r\n/g, '\n')
+        .replace(/[\r\u2028\u000B\u0085\u000C]/g, '\n')
+        .replace(/\u2029/g, '\n\n')
+        .replace(/\u00A0/g, ' ')
+        .replace(/[\u200B\uFEFF]/g, '');
+
+      const msg = await client.sendMessage(chatId, cleanText);
       return { success: true, messageId: msg?.id?._serialized || msg?.id?.id || 'msg-' + Date.now(), data: msg };
     } catch (err) {
       return { success: false, error: err.message };
@@ -795,7 +802,14 @@ class OpenWAService {
         }
       }
 
-      const msg = await client.sendMessage(chatId, media, { caption });
+      const cleanCaption = (caption || '')
+        .replace(/\r\n/g, '\n')
+        .replace(/[\r\u2028\u000B\u0085\u000C]/g, '\n')
+        .replace(/\u2029/g, '\n\n')
+        .replace(/\u00A0/g, ' ')
+        .replace(/[\u200B\uFEFF]/g, '');
+
+      const msg = await client.sendMessage(chatId, media, { caption: cleanCaption });
       return { success: true, messageId: msg?.id?._serialized || msg?.id?.id || 'msg-' + Date.now(), data: msg };
     } catch (err) {
       return { success: false, error: err.message };

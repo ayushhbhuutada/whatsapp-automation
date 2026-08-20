@@ -648,13 +648,26 @@ class AutomationRunner {
       }
 
       // --- Anti-Ban: Spintax Message Variation ---
-      let finalMessage = contact.message_template || '';
+      let finalMessage = (contact.message_template || '')
+        .replace(/\r\n/g, '\n')
+        .replace(/[\r\u2028\u000B\u0085\u000C]/g, '\n')
+        .replace(/\u2029/g, '\n\n')
+        .replace(/\u00A0/g, ' ')
+        .replace(/[\u200B\uFEFF]/g, '');
+
       finalMessage = parseSpintax(finalMessage);
 
       // --- Anti-Ban System 3: Deep Content Fingerprint Diversification ---
       if (antiBanSettings.enable_deep_diversification !== 'false') {
         finalMessage = deepDiversifyMessage(finalMessage, antiBanSettings);
       }
+
+      finalMessage = (finalMessage || '')
+        .replace(/\r\n/g, '\n')
+        .replace(/[\r\u2028\u000B\u0085\u000C]/g, '\n')
+        .replace(/\u2029/g, '\n\n')
+        .replace(/\u00A0/g, ' ')
+        .replace(/[\u200B\uFEFF]/g, '');
 
       let success = false;
       let lastError = null;

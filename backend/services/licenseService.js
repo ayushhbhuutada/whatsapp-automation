@@ -43,13 +43,18 @@ export function getLeaseFilePaths() {
  * Loads cached lease from disk or database
  */
 export async function loadCachedLease() {
+  const currentMachineId = getMachineId();
   const leasePaths = getLeaseFilePaths();
+
   for (const fpath of leasePaths) {
     try {
       if (fs.existsSync(fpath)) {
         const content = fs.readFileSync(fpath, 'utf8').trim();
         if (content) {
-          return JSON.parse(content);
+          const parsed = JSON.parse(content);
+          if (parsed && (!parsed.machineId || parsed.machineId === currentMachineId)) {
+            return parsed;
+          }
         }
       }
     } catch (e) {}
@@ -59,7 +64,10 @@ export async function loadCachedLease() {
   try {
     const row = await get("SELECT value FROM settings WHERE key = 'offline_license_lease'");
     if (row && row.value) {
-      return JSON.parse(row.value);
+      const parsed = JSON.parse(row.value);
+      if (parsed && (!parsed.machineId || parsed.machineId === currentMachineId)) {
+        return parsed;
+      }
     }
     const keyRow = await get("SELECT value FROM settings WHERE key = 'license_key'");
     if (keyRow && keyRow.value) {
