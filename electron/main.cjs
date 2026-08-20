@@ -1,4 +1,4 @@
-const { app, BrowserWindow, Tray, Menu, ipcMain, shell, utilityProcess } = require('electron');
+const { app, BrowserWindow, Tray, Menu, ipcMain, shell, utilityProcess, dialog } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
@@ -6,6 +6,21 @@ const net = require('net');
 const http = require('http');
 const { spawn, fork } = require('child_process');
 const crypto = require('crypto');
+
+// Global error boundary & crash handler for main process
+process.on('uncaughtException', (err) => {
+  console.error('[Electron Uncaught Exception]', err);
+  try {
+    const baseDir = process.env.APPDATA ? path.join(process.env.APPDATA, 'WhatsAppAutomation') : path.join(os.homedir(), '.whatsappautomation');
+    const logsDir = path.join(baseDir, 'logs');
+    if (!fs.existsSync(logsDir)) fs.mkdirSync(logsDir, { recursive: true });
+    fs.appendFileSync(path.join(logsDir, 'electron_crash.log'), `\n[${new Date().toISOString()}] Uncaught Exception: ${err.message}\n${err.stack}\n`);
+  } catch (_e) {}
+});
+
+process.on('unhandledRejection', (reason) => {
+  console.error('[Electron Unhandled Rejection]', reason);
+});
 
 let mainWindow = null;
 let splashWindow = null;
