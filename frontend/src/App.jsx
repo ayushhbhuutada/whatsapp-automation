@@ -6,6 +6,8 @@ import {
   generateClientSideLicense, 
   inspectClientSideLicense, 
   getLocalLicenseHistory,
+  exportLicensesJson,
+  importLicensesJson,
   revokeLocalLicense,
   reactivateLocalLicense,
   deleteLocalLicense
@@ -5027,6 +5029,29 @@ function AdminLicenseConsoleView() {
   const [inspectResult, setInspectResult] = useState(null);
   const [inspectError, setInspectError] = useState('');
 
+  const importFileInputRef = useRef(null);
+
+  const handleImportFile = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const result = importLicensesJson(event.target.result);
+        if (result.success) {
+          alert(`Successfully synced ${result.added} new license(s)! Total issued licenses: ${result.count}`);
+          fetchHistory();
+        } else {
+          alert(`Failed to import licenses: ${result.error}`);
+        }
+      } catch (_err) {
+        alert('Invalid JSON file format.');
+      }
+    };
+    reader.readAsText(file);
+    e.target.value = '';
+  };
+
   const fetchHistory = async () => {
     setLoadingHistory(true);
     let serverLicenses = [];
@@ -5765,10 +5790,35 @@ const DEFAULT_STORE_CONFIG_FRONTEND = {
               <p className="text-xs text-slate-400">View complete token details, bound machines, remaining validity, and manage live revocation</p>
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <input
+                type="file"
+                ref={importFileInputRef}
+                accept=".json,application/json"
+                className="hidden"
+                onChange={handleImportFile}
+              />
+              <button
+                type="button"
+                onClick={() => importFileInputRef.current?.click()}
+                title="Import & sync licenses from a JSON backup file"
+                className="px-3 py-1.5 bg-slate-900 border border-slate-700 hover:bg-slate-800 text-slate-200 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shadow-sm"
+              >
+                <Upload size={13} className="text-emerald-400" />
+                <span>Import Sync</span>
+              </button>
+              <button
+                type="button"
+                onClick={exportLicensesJson}
+                title="Download JSON backup of all issued licenses"
+                className="px-3 py-1.5 bg-slate-900 border border-slate-700 hover:bg-slate-800 text-slate-200 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shadow-sm"
+              >
+                <Download size={13} className="text-blue-400" />
+                <span>Export Backup</span>
+              </button>
               <button
                 onClick={() => setSubTab('generator')}
-                className="px-3 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow"
+                className="px-3 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow cursor-pointer"
               >
                 <Plus size={14} />
                 <span>Issue New Key</span>
@@ -5776,7 +5826,7 @@ const DEFAULT_STORE_CONFIG_FRONTEND = {
               <button
                 onClick={fetchHistory}
                 title="Refresh License History"
-                className="p-2 bg-slate-900 border border-slate-800 hover:bg-slate-800 text-slate-300 rounded-xl transition"
+                className="p-2 bg-slate-900 border border-slate-800 hover:bg-slate-800 text-slate-300 rounded-xl transition cursor-pointer"
               >
                 <RefreshCw size={15} className={loadingHistory ? 'animate-spin text-emerald-400' : ''} />
               </button>

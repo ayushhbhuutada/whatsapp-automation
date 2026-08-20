@@ -313,3 +313,49 @@ export function deleteLocalLicense(idOrKey) {
     return false;
   }
 }
+
+/**
+ * Exports all local licenses as a downloadable JSON file
+ */
+export function exportLicensesJson() {
+  const list = getLocalLicenseHistory();
+  const blob = new Blob([JSON.stringify(list, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `whatsapp_licenses_backup_${new Date().toISOString().slice(0, 10)}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+/**
+ * Imports licenses into local storage from a JSON string or array
+ */
+export function importLicensesJson(jsonData) {
+  try {
+    let incoming = typeof jsonData === 'string' ? JSON.parse(jsonData) : jsonData;
+    if (!Array.isArray(incoming)) {
+      if (incoming.licenses && Array.isArray(incoming.licenses)) incoming = incoming.licenses;
+      else incoming = [incoming];
+    }
+    const current = getLocalLicenseHistory();
+    const map = new Map();
+    for (const lic of current) {
+      const k = lic.license_key || lic.licenseKey;
+      if (k) map.set(k, lic);
+    }
+    let addedCount = 0;
+    for (const lic of incoming) {
+      const k = lic.license_key || lic.licenseKey;
+      if (k) {
+        if (!map.has(k)) addedCount++;
+        map.set(k, lic);
+      }
+    }
+    const merged = Array.from(map.values());
+    localStorage.setItem('admin_generated_licenses', JSON.stringify(merged.slice(0, 500)));
+    return { success: true, count: merged.length, added: addedCount };
+  } catch (err) {
+    return { success: false, error: err.message };
+  }
+}
