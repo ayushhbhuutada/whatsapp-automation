@@ -12,6 +12,11 @@ import {
   reactivateLocalLicense,
   deleteLocalLicense
 } from './utils/licenseClient';
+import {
+  syncLicensesWithCloud,
+  initAutoSyncEngine,
+  subscribeToCloudSync
+} from './utils/cloudSyncService';
 import { 
   LayoutDashboard, 
   Users, 
@@ -5029,7 +5034,29 @@ function AdminLicenseConsoleView() {
   const [inspectResult, setInspectResult] = useState(null);
   const [inspectError, setInspectError] = useState('');
 
+  // Cloud Auto-Sync State
+  const [cloudSyncStatus, setCloudSyncStatus] = useState('synced'); // 'synced', 'syncing', 'error'
+  const [lastSyncedTime, setLastSyncedTime] = useState(null);
+
   const importFileInputRef = useRef(null);
+
+  useEffect(() => {
+    const unsubscribe = subscribeToCloudSync((state) => {
+      setCloudSyncStatus(state.status);
+      if (state.lastSyncedAt) {
+        setLastSyncedTime(new Date(state.lastSyncedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
+      }
+    });
+
+    const stopAutoSync = initAutoSyncEngine(API_BASE, () => {
+      fetchHistory();
+    });
+
+    return () => {
+      unsubscribe();
+      stopAutoSync();
+    };
+  }, []);
 
   const handleImportFile = (e) => {
     const file = e.target.files?.[0];
@@ -5039,8 +5066,8 @@ function AdminLicenseConsoleView() {
       try {
         const result = importLicensesJson(event.target.result);
         if (result.success) {
+          syncLicensesWithCloud(API_BASE).then(() => fetchHistory());
           alert(`Successfully synced ${result.added} new license(s)! Total issued licenses: ${result.count}`);
-          fetchHistory();
         } else {
           alert(`Failed to import licenses: ${result.error}`);
         }
@@ -5127,7 +5154,7 @@ function AdminLicenseConsoleView() {
       await axios.post(`${API_BASE}/admin/licenses/revoke`, { id, licenseKey: key });
     } catch (_e) {}
 
-    fetchHistory();
+    syncLicensesWithCloud(API_BASE).then(() => fetchHistory());
   };
 
   const handleReactivateLicense = async (lic) => {
@@ -5145,7 +5172,7 @@ function AdminLicenseConsoleView() {
       await axios.post(`${API_BASE}/admin/licenses/reactivate`, { id, licenseKey: key });
     } catch (_e) {}
 
-    fetchHistory();
+    syncLicensesWithCloud(API_BASE).then(() => fetchHistory());
   };
 
   const handleDeleteLicenseRecord = async (lic) => {
@@ -5163,7 +5190,7 @@ function AdminLicenseConsoleView() {
       await axios.post(`${API_BASE}/admin/licenses/delete`, { id, licenseKey: key });
     } catch (_e) {}
 
-    fetchHistory();
+    syncLicensesWithCloud(API_BASE).then(() => fetchHistory());
   };
 
   const copyLicenseKeyOnly = (key, id = null) => {
@@ -5464,6 +5491,7 @@ const DEFAULT_STORE_CONFIG_FRONTEND = {
       const clientResult = await generateClientSideLicense(formData);
       if (clientResult.success) {
         setGeneratedKey(clientResult);
+        syncLicensesWithCloud(API_BASE).then(() => fetchHistory());
       } else {
         setErrorMsg('Failed to generate license: ' + (clientResult.error || 'Unknown error'));
       }
@@ -5505,8 +5533,25 @@ const DEFAULT_STORE_CONFIG_FRONTEND = {
             <ShieldCheck size={26} />
           </div>
           <div>
-            <h2 className="text-xl font-heading font-bold text-white tracking-tight">Admin License & Client Hub</h2>
-            <p className="text-xs text-slate-400">Generate node-locked commercial keys, manage client validity, and control access</p>
+            <div className="flex items-center gap-3">
+              <h2 className="text-xl font-heading font-bold text-white tracking-tight">Admin License & Client Hub</h2>
+              <div className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-slate-950/80 border border-slate-800 rounded-full text-[11px]">
+                <span className={`w-2 h-2 rounded-full ${cloudSyncStatus === 'syncing' ? 'bg-amber-400 animate-ping' : cloudSyncStatus === 'error' ? 'bg-rose-500' : 'bg-emerald-400 shadow-[0_0_8px_#34d399]'}`} />
+                <span className="font-semibold text-slate-300">
+                  {cloudSyncStatus === 'syncing' ? 'Syncing with Cloud Vault...' : 'Auto-Sync Cloud Vault'}
+                </span>
+                {lastSyncedTime && <span className="text-[10px] text-slate-500 font-mono">({lastSyncedTime})</span>}
+                <button
+                  type="button"
+                  onClick={() => syncLicensesWithCloud(API_BASE).then(() => fetchHistory())}
+                  title="Force Instant Cloud Sync"
+                  className="ml-1 text-slate-400 hover:text-emerald-400 transition cursor-pointer"
+                >
+                  <RefreshCw size={11} className={cloudSyncStatus === 'syncing' ? 'animate-spin' : ''} />
+                </button>
+              </div>
+            </div>
+            <p className="text-xs text-slate-400">Generate node-locked commercial keys, manage client validity, and auto-sync across all your PCs in real time</p>
           </div>
         </div>
 
