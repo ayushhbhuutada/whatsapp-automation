@@ -74,4 +74,19 @@ if (fs.existsSync(splashPath)) {
   console.log(`✔ Updated electron/splash.html -> v${newVersion}`);
 }
 
+// 5. Update frontend/public/version.json for Vercel & GitHub releases
+const publicVersionPath = path.join(rootDir, 'frontend', 'public', 'version.json');
+if (fs.existsSync(publicVersionPath)) {
+  try {
+    const vJson = JSON.parse(fs.readFileSync(publicVersionPath, 'utf8'));
+    vJson.version = newVersion;
+    vJson.latestVersion = newVersion;
+    vJson.releaseName = `WhatsApp Automator Pro v${newVersion}`;
+    vJson.downloadUrl = `https://github.com/ayushhbhuutada/whatsapp-automation/releases/download/v${newVersion}/WhatsAppAutomationSetup.exe`;
+    vJson.publishedAt = new Date().toISOString();
+    fs.writeFileSync(publicVersionPath, JSON.stringify(vJson, null, 2) + '\n', 'utf8');
+    console.log(`✔ Updated frontend/public/version.json -> v${newVersion}`);
+  } catch (_e) {}
+}
+
 console.log(`\n🎉 Project successfully updated to version v${newVersion}!`);

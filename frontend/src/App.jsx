@@ -172,7 +172,7 @@ export default function App() {
   // Auto-Updater State
   const [showUpdateModal, setShowUpdateModal] = useState(false);
   const [updateModalMode, setUpdateModalMode] = useState('check');
-  const [appVersion, setAppVersion] = useState('1.1.0');
+  const [appVersion, setAppVersion] = useState('1.2.0');
   const [hasUpdateBadge, setHasUpdateBadge] = useState(false);
 
   // Rigorous Hardware License Verification on App Startup

@@ -206,7 +206,7 @@ async function checkVercelUpdates(endpointUrl) {
 
 /**
  * Main update checking function
- * Checks GitHub by default or Vercel if configured
+ * Checks GitHub Raw repository metadata & GitHub Releases
  */
 export async function checkForUpdates(options = {}) {
   const {
@@ -215,15 +215,38 @@ export async function checkForUpdates(options = {}) {
     vercelUrl = ''
   } = options;
 
+  // 1. First priority: Check live raw version.json from GitHub main branch
+  try {
+    const rawUrl = `https://raw.githubusercontent.com/${githubRepo}/main/frontend/public/version.json`;
+    const rawData = await fetchJson(rawUrl);
+    const remoteVersion = (rawData.version || rawData.latestVersion || '').replace(/^v/i, '').trim();
+    if (remoteVersion) {
+      const updateAvailable = isNewerVersion(remoteVersion, currentAppVersion);
+      return {
+        source: 'github-live',
+        updateAvailable,
+        currentVersion: currentAppVersion,
+        latestVersion: remoteVersion,
+        releaseName: rawData.releaseName || `WhatsApp Automator Pro v${remoteVersion}`,
+        releaseNotes: rawData.releaseNotes || 'Latest improvements and updates from cloud.',
+        publishedAt: rawData.publishedAt || new Date().toISOString(),
+        downloadUrl: rawData.downloadUrl || `https://github.com/${githubRepo}/releases/download/v${remoteVersion}/WhatsAppAutomationSetup.exe`,
+        assetName: rawData.assetName || 'WhatsAppAutomationSetup.exe',
+        assetSize: 0
+      };
+    }
+  } catch (_rawErr) {
+    // Fallback to GitHub Releases or Vercel
+  }
+
   try {
     if (sourceType === 'vercel' && vercelUrl) {
       return await checkVercelUpdates(vercelUrl);
     }
     
-    // Default: Check GitHub Releases
+    // Fallback: Check GitHub Releases API
     return await checkGitHubUpdates(githubRepo);
   } catch (err) {
-    // If GitHub check fails (e.g. repo not published yet or private), return graceful status
     return {
       source: sourceType,
       updateAvailable: false,
