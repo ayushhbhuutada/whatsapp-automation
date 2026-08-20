@@ -264,6 +264,8 @@ function registerIpcHandlers() {
       return true;
     }
     return false;
+  });
+
   // 7. Get Application Version
   ipcMain.handle('get-version', () => {
     return app ? app.getVersion() : '1.0.0';
