@@ -623,14 +623,31 @@ export default function App() {
     return (
       <div className="min-h-screen bg-slate-950 flex items-center justify-center p-4">
         <div className="w-full max-w-lg bg-slate-900 border border-slate-800 rounded-2xl p-8 shadow-2xl space-y-6">
-          <div className="flex items-center justify-center gap-3">
-            <div className="w-12 h-12 bg-emerald-500 rounded-2xl flex items-center justify-center text-white shadow-lg shadow-emerald-500/20">
-              <Send size={26} className="rotate-45" />
+          <div className="flex items-center justify-between border-b border-slate-800/80 pb-4">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-emerald-500 rounded-2xl flex items-center justify-center text-white shadow-lg shadow-emerald-500/20">
+                <Send size={22} className="rotate-45" />
+              </div>
+              <div>
+                <h1 className="font-heading text-lg font-bold tracking-tight text-white">Whatsapp Automator</h1>
+                <span className="text-[10px] text-emerald-400 font-semibold tracking-widest uppercase">Pro Desktop Edition</span>
+              </div>
             </div>
-            <div>
-              <h1 className="font-heading text-xl font-bold tracking-tight text-white">Whatsapp Automator</h1>
-              <span className="text-xs text-emerald-400 font-semibold tracking-widest uppercase">Pro Desktop Edition</span>
-            </div>
+
+            {/* Check for Updates on Activation Screen */}
+            <button
+              type="button"
+              onClick={() => {
+                setUpdateModalMode('check');
+                setShowUpdateModal(true);
+              }}
+              className="px-3 py-1.5 rounded-xl border border-emerald-500/35 bg-emerald-500/10 text-emerald-300 hover:bg-emerald-500/25 text-xs font-bold flex items-center gap-1.5 transition-all shadow-sm cursor-pointer"
+              title="Check for software updates"
+            >
+              <Sparkles size={13} className="text-emerald-400" />
+              <span>Check Updates (v{appVersion})</span>
+              {hasUpdateBadge && <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />}
+            </button>
           </div>
 
           {authError && (
@@ -702,6 +719,15 @@ export default function App() {
               </button>
             </div>
           </form>
+
+          {/* Auto-Update Modal on Activation View */}
+          <AutoUpdateModal
+            isOpen={showUpdateModal}
+            onClose={() => setShowUpdateModal(false)}
+            apiBase={API_BASE}
+            initialMode={updateModalMode}
+            currentVersion={appVersion}
+          />
         </div>
       </div>
     );
