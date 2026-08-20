@@ -2065,7 +2065,7 @@ export const DEFAULT_STORE_CONFIG = {
   brandTagline: 'Commercial Desktop Automation Suite',
   supportEmail: 'support@rudraexpression.in',
   supportWhatsapp: '+919876543210',
-  downloadUrl: 'https://github.com/ayushhbhuutada/whatsapp-automation/releases/download/v1.0.0/WhatsAppAutomationSetup.exe',
+  downloadUrl: 'https://github.com/ayushhbhuutada/whatsapp-automation/releases/latest/download/WhatsAppAutomationSetup.exe',
   razorpayKeyId: '',
   razorpayKeySecret: '',
   plans: [

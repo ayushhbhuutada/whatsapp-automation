@@ -5291,7 +5291,7 @@ const DEFAULT_STORE_CONFIG_FRONTEND = {
   brandTagline: 'Commercial Desktop Automation Suite',
   supportEmail: 'support@rudraexpression.in',
   supportWhatsapp: '+919876543210',
-  downloadUrl: 'https://github.com/ayushhbhuutada/whatsapp-automation/releases/download/v1.0.0/WhatsAppAutomationSetup.exe',
+  downloadUrl: 'https://github.com/ayushhbhuutada/whatsapp-automation/releases/latest/download/WhatsAppAutomationSetup.exe',
   razorpayKeyId: '',
   razorpayKeySecret: '',
   plans: [
@@ -6879,7 +6879,7 @@ function PublicLandingView({
   const [publicConfig, setPublicConfig] = useState({
     brandName: 'WhatsApp Automator Pro',
     brandTagline: 'Commercial Desktop Edition',
-    downloadUrl: 'https://github.com/ayushhbhuutada/whatsapp-automation/releases/download/v1.0.0/WhatsAppAutomationSetup.exe',
+    downloadUrl: 'https://github.com/ayushhbhuutada/whatsapp-automation/releases/latest/download/WhatsAppAutomationSetup.exe',
     supportEmail: 'support@rudraexpression.in',
     supportWhatsapp: '+919876543210'
   });
@@ -6894,7 +6894,7 @@ function PublicLandingView({
       .catch(() => {});
   }, []);
 
-  const downloadUrl = publicConfig.downloadUrl || "https://github.com/ayushhbhuutada/whatsapp-automation/releases/download/v1.0.0/WhatsAppAutomationSetup.exe";
+  const downloadUrl = publicConfig.downloadUrl || "https://github.com/ayushhbhuutada/whatsapp-automation/releases/latest/download/WhatsAppAutomationSetup.exe";
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col selection:bg-emerald-500 selection:text-slate-950">
@@ -6976,13 +6976,13 @@ function PublicLandingView({
               </a>
 
               <a
-                href="https://github.com/ayushhbhuutada/whatsapp-automation/releases/tag/v1.0.0"
+                href="https://github.com/ayushhbhuutada/whatsapp-automation/releases/latest"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="w-full sm:w-auto px-6 py-4 bg-slate-900/60 hover:bg-slate-800 border border-slate-800 text-slate-200 text-sm font-bold rounded-xl transition-all flex items-center justify-center gap-2 text-center"
               >
                 <ExternalLink size={18} className="text-cyan-400" />
-                <span>GitHub Releases (Mirror)</span>
+                <span>GitHub Releases (Latest)</span>
               </a>
             </div>
             <p className="text-[11px] text-slate-400 flex items-center gap-1.5 mt-1">
