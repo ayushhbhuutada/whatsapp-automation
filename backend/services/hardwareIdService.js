@@ -56,6 +56,7 @@ function writeRegistryAnchor(machineId) {
 function getAnchorFilePaths() {
   const paths = [];
 
+  // 1. %APPDATA%/WhatsAppAutomation/machine_id.anchor
   const appData = process.env.APPDATA;
   if (appData) {
     const dir = path.join(appData, 'WhatsAppAutomation');
@@ -65,20 +66,21 @@ function getAnchorFilePaths() {
     } catch (_e) {}
   }
 
+  // 2. %LOCALAPPDATA%/WhatsAppAutomation/machine_id.anchor
   const localAppData = process.env.LOCALAPPDATA;
   if (localAppData) {
-    const dir = path.join(localAppData, 'Programs', 'WhatsAppAutomation');
+    const dir = path.join(localAppData, 'WhatsAppAutomation');
     try {
       if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
       paths.push(path.join(dir, 'machine_id.anchor'));
     } catch (_e) {}
   }
 
-  try {
-    const dbDir = path.resolve(__dirname, '../../database');
-    if (!fs.existsSync(dbDir)) fs.mkdirSync(dbDir, { recursive: true });
-    paths.push(path.join(dbDir, 'machine_id.anchor'));
-  } catch (_e) {}
+  // 3. %USERPROFILE%/.whatsapp_automation_machine_id
+  const userProfile = process.env.USERPROFILE || os.homedir();
+  if (userProfile) {
+    paths.push(path.join(userProfile, '.whatsapp_automation_machine_id'));
+  }
 
   return paths;
 }

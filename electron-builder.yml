@@ -10,6 +10,9 @@ files:
   - backend/**/*
   - frontend/dist/**/*
   - database/**/*
+  - "!database/*.anchor"
+  - "!database/license.json"
+  - "!**/*.anchor"
   - package.json
 asar: false
 forceCodeSigning: false

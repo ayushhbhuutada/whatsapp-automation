@@ -60,6 +60,9 @@
       "backend/**/*",
       "frontend/dist/**/*",
       "database/**/*",
+      "!database/*.anchor",
+      "!database/license.json",
+      "!**/*.anchor",
       "electron/**/*",
       "package.json"
     ],
@@ -87,7 +90,7 @@
       "createStartMenuShortcut": true,
       "shortcutName": "WhatsApp Automation",
       "uninstallDisplayName": "WhatsApp Automation",
-      "deleteAppDataOnUninstall": true,
+      "deleteAppDataOnUninstall": false,
       "runAfterFinish": true
     }
   }

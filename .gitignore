@@ -48,8 +48,10 @@ dist/
 **/.wwebjs_auth/
 **/.wwebjs_cache/
 .agents/
-*.bak
 database/license.json
+database/*.anchor
+*.anchor
+scratch/
 
 # 6. System & OS Files
 .DS_Store
