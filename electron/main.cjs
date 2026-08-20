@@ -67,6 +67,13 @@ function createSplashWindow() {
   const splashPath = path.join(__dirname, 'splash.html');
   if (fs.existsSync(splashPath)) {
     splashWindow.loadFile(splashPath);
+    splashWindow.webContents.on('did-finish-load', () => {
+      const v = app.getVersion();
+      splashWindow.webContents.executeJavaScript(`
+        var vEl = document.getElementById('version');
+        if (vEl) vEl.textContent = 'v${v}';
+      `).catch(() => {});
+    });
   }
 }
 
